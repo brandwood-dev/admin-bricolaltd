@@ -13,7 +13,7 @@ class ApiClient {
 
   constructor() {
     // Change the base URL to include v1
-    this.baseURL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000/api';
+    this.baseURL = import.meta.env.VITE_API_BASE_URL || 'https://api.bricolaltd.com/api';
     
     this.client = axios.create({
       baseURL: this.baseURL,

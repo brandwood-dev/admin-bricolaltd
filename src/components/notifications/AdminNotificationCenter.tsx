@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Bell, X, Check, Clock, AlertCircle, Info, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -104,6 +105,7 @@ const formatTimeAgo = (dateString: string) => {
 export const AdminNotificationCenter: React.FC<AdminNotificationCenterProps> = ({
   className,
 }) => {
+  const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
   const [loading, setLoading] = useState(false);
@@ -111,66 +113,167 @@ export const AdminNotificationCenter: React.FC<AdminNotificationCenterProps> = (
   const fetchNotifications = async () => {
     try {
       setLoading(true);
-      const response = await apiClient.get('/notifications/admin');
-      const notificationsData = response.data.data || [];
+      const response = await apiClient.get('/admin/notifications');
+      
+      // Vérifier la structure de la réponse selon le format de l'API
+      // L'API retourne {"data": [...], "message": "Request successful"}
+      let notificationsData = [];
+      
+      if (response && response.data) {
+        // Vérifier si response.data.data existe (structure API standard)
+        if (response.data.data) {
+          if (Array.isArray(response.data.data)) {
+            notificationsData = response.data.data;
+          } else if (typeof response.data.data === 'object' && response.data.data !== null) {
+            // Si c'est un objet, vérifier s'il contient des notifications
+            const possibleArrays = Object.values(response.data.data).filter(val => Array.isArray(val));
+            if (possibleArrays.length > 0) {
+              notificationsData = possibleArrays[0] as AdminNotification[];
+            } else {
+              // Peut-être que l'objet contient directement les propriétés des notifications
+              notificationsData = [response.data.data] as AdminNotification[];
+            }
+          }
+        }
+        // Sinon, vérifier si response.data est directement un tableau
+        else if (Array.isArray(response.data)) {
+          notificationsData = response.data;
+        }
+        // Sinon, utiliser un tableau vide
+        else {
+          notificationsData = [];
+        }
+      }
+      
       setNotifications(notificationsData);
     } catch (error) {
       console.error('Error fetching admin notifications:', error);
-      toast.error('Erreur lors du chargement des notifications');
+      
+      // Gestion d'erreur améliorée
+      if (error?.response?.status === 404) {
+        console.info('Endpoint notifications admin non trouvé');
+      } else if (error?.response?.status >= 500) {
+        toast.error('Erreur serveur lors du chargement des notifications');
+      } else if (!error?.message?.includes('Network Error') && !error?.message?.includes('ERR_NETWORK')) {
+        toast.error('Erreur lors du chargement des notifications');
+      }
+      
+      // Définir un tableau vide en cas d'erreur
+      setNotifications([]);
     } finally {
       setLoading(false);
     }
   };
 
   const markAsRead = async (id: string) => {
+    if (!id) {
+      console.error('ID de notification manquant');
+      return;
+    }
+    
     try {
-      await apiClient.patch(`/notifications/${id}/read`);
-      setNotifications(prev => 
-        prev.map(notification => 
-          notification.id === id 
-            ? { ...notification, isRead: true }
-            : notification
-        )
-      );
+      const response = await apiClient.patch(`/admin/notifications/${id}/read`);
+      
+      // Vérifier le succès de la réponse
+      if (response && (response.status === 200 || response.status === 204)) {
+        setNotifications(prev => 
+          prev.map(notification => 
+            notification.id === id 
+              ? { ...notification, isRead: true }
+              : notification
+          )
+        );
+      } else {
+        console.warn('Réponse inattendue lors du marquage comme lu:', response);
+      }
     } catch (error) {
       console.error('Error marking notification as read:', error);
-      toast.error('Erreur lors de la mise à jour');
+      if (error?.response?.status === 404) {
+        toast.error('Notification non trouvée');
+      } else if (error?.response?.status >= 500) {
+        toast.error('Erreur serveur lors de la mise à jour');
+      } else {
+        toast.error('Erreur lors de la mise à jour');
+      }
     }
   };
 
   const markAllAsRead = async () => {
     try {
-      await apiClient.patch('/notifications/admin/mark-all-read');
-      setNotifications(prev => 
-        prev.map(notification => ({ ...notification, isRead: true }))
-      );
-      toast.success('Toutes les notifications ont été marquées comme lues');
+      const response = await apiClient.patch('/admin/notifications/mark-all-read');
+      
+      // Vérifier le succès de la réponse
+      if (response && (response.status === 200 || response.status === 204)) {
+        setNotifications(prev => 
+          prev.map(notification => ({ ...notification, isRead: true }))
+        );
+        toast.success('Toutes les notifications ont été marquées comme lues');
+      } else {
+        console.warn('Réponse inattendue lors du marquage global:', response);
+        toast.error('Erreur lors de la mise à jour');
+      }
     } catch (error) {
       console.error('Error marking all notifications as read:', error);
-      toast.error('Erreur lors de la mise à jour');
+      if (error?.response?.status === 404) {
+        toast.error('Endpoint non trouvé');
+      } else if (error?.response?.status >= 500) {
+        toast.error('Erreur serveur lors de la mise à jour');
+      } else {
+        toast.error('Erreur lors de la mise à jour');
+      }
     }
   };
 
   const deleteNotification = async (id: string, event: React.MouseEvent) => {
     event.stopPropagation();
+    
+    if (!id) {
+      console.error('ID de notification manquant pour la suppression');
+      toast.error('Erreur: ID de notification manquant');
+      return;
+    }
+    
     try {
-      await apiClient.delete(`/notifications/${id}`);
-      setNotifications(prev => prev.filter(notification => notification.id !== id));
-      toast.success('Notification supprimée');
+      const response = await apiClient.delete(`/admin/notifications/${id}`);
+      
+      // Vérifier le succès de la réponse
+      if (response && (response.status === 200 || response.status === 204)) {
+        setNotifications(prev => prev.filter(notification => notification.id !== id));
+        toast.success('Notification supprimée');
+      } else {
+        console.warn('Réponse inattendue lors de la suppression:', response);
+        toast.error('Erreur lors de la suppression');
+      }
     } catch (error) {
       console.error('Error deleting notification:', error);
-      toast.error('Erreur lors de la suppression');
+      if (error?.response?.status === 404) {
+        toast.error('Notification non trouvée');
+        // Supprimer quand même de l'interface si elle n'existe plus côté serveur
+        setNotifications(prev => prev.filter(notification => notification.id !== id));
+      } else if (error?.response?.status >= 500) {
+        toast.error('Erreur serveur lors de la suppression');
+      } else {
+        toast.error('Erreur lors de la suppression');
+      }
     }
   };
 
   const handleNotificationClick = (notification: AdminNotification) => {
+    if (!notification || !notification.id) {
+      console.error('Notification invalide:', notification);
+      return;
+    }
+    
     if (!notification.isRead) {
       markAsRead(notification.id);
     }
-    if (notification.link) {
-      window.open(notification.link, '_blank');
+    
+    // Navigation logic based on notification type
+    if (notification.type === 'new_ad' && notification.relatedId) {
+      navigate(`/admin/ads/${notification.relatedId}`);
+    } else if (notification.type === 'user_report' && notification.relatedId) {
+      navigate(`/admin/reports/${notification.relatedId}`);
     }
-    setIsOpen(false);
   };
 
   useEffect(() => {
@@ -240,7 +343,9 @@ export const AdminNotificationCenter: React.FC<AdminNotificationCenterProps> = (
             </div>
           ) : (
             <div className="divide-y">
-              {notifications.map((notification) => (
+              {notifications
+                .filter(notification => notification && notification.id)
+                .map((notification) => (
                 <div
                   key={notification.id}
                   className={cn(
@@ -260,7 +365,7 @@ export const AdminNotificationCenter: React.FC<AdminNotificationCenterProps> = (
                           'text-sm font-medium truncate',
                           !notification.isRead && 'font-semibold'
                         )}>
-                          {notification.title}
+                          {notification.title || 'Notification sans titre'}
                         </p>
                         <div className="flex items-center gap-2">
                           {getPriorityBadge(notification.priority)}
@@ -270,11 +375,11 @@ export const AdminNotificationCenter: React.FC<AdminNotificationCenterProps> = (
                         </div>
                       </div>
                       <p className="text-sm text-muted-foreground mb-2 line-clamp-2">
-                        {notification.message}
+                        {notification.message || 'Aucun message'}
                       </p>
                       <div className="flex items-center justify-between">
                         <p className="text-xs text-muted-foreground">
-                          {formatTimeAgo(notification.createdAt)}
+                          {notification.createdAt ? formatTimeAgo(notification.createdAt) : 'Date inconnue'}
                         </p>
                         <Button
                           variant="ghost"

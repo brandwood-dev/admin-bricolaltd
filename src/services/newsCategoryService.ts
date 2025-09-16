@@ -1,4 +1,4 @@
-import { apiClient } from './apiClient';
+import { apiClient, ApiResponse } from './api';
 
 export interface NewsCategory {
   id: string;
@@ -34,14 +34,14 @@ export interface NewsCategoriesResponse {
 }
 
 class NewsCategoryService {
-  private baseUrl = '/news-categories';
+  private baseUrl = '/categories';
 
   async getAllCategories(): Promise<NewsCategoriesResponse> {
     try {
-      const response = await apiClient.get(this.baseUrl);
+      const response = await apiClient.get<NewsCategory[]>(this.baseUrl);
       return {
         success: true,
-        data: response.data
+        data: response.data.data || response.data
       };
     } catch (error: any) {
       console.error('Error fetching news categories:', error);

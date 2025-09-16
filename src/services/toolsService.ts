@@ -22,8 +22,10 @@ export interface Tool {
   depositAmount: number;
   imageUrl?: string; // Deprecated, use photos instead
   photos: ToolPhoto[];
-  toolStatus: 'DRAFT' | 'PUBLISHED' | 'UNDER_REVIEW' | 'REJECTED' | 'ARCHIVED';
+  toolStatus: 'DRAFT' | 'PUBLISHED' | 'UNDER_REVIEW' | 'ARCHIVED';
   availabilityStatus: 'AVAILABLE' | 'UNAVAILABLE' | 'MAINTENANCE' | 'RESERVED';
+  moderationStatus: 'Pending' | 'Confirmed' | 'Rejected';
+  rejectionReason?: string;
   category: {
     id: string;
     name: string;
@@ -42,15 +44,17 @@ export interface Tool {
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;
-  moderatedAt?: string;
 }
 
 export interface ToolStats {
   total: number;
   published: number;
-  pending: number;
-  rejected: number;
+  underReview: number;
   archived: number;
+  draft: number;
+  moderationPending: number;
+  moderationConfirmed: number;
+  moderationRejected: number;
 }
 
 export interface PaginatedResponse<T> {
@@ -64,6 +68,7 @@ export interface PaginatedResponse<T> {
 export interface ToolFilters {
   search?: string;
   status?: string;
+  moderationStatus?: string;
   category?: string;
   subcategory?: string;
   owner?: string;
@@ -74,7 +79,7 @@ export interface ToolFilters {
 }
 
 export interface UpdateToolStatusDto {
-  status?: 'DRAFT' | 'PUBLISHED' | 'UNDER_REVIEW' | 'REJECTED' | 'ARCHIVED';
+  status?: 'DRAFT' | 'PUBLISHED' | 'UNDER_REVIEW' | 'ARCHIVED';
   reason?: string;
   adminNotes?: string;
 }
@@ -156,6 +161,13 @@ export class ToolsService {
   async getAllSubcategories(): Promise<ApiResponse<Subcategory[]>> {
     return await apiClient.get<Subcategory[]>('/categories/subcategories');
   }
+
+  // Update moderation status
+  async updateModerationStatus(id: string, status: 'Pending' | 'Confirmed' | 'Rejected'): Promise<ApiResponse<Tool>> {
+    return await apiClient.patch<Tool>(`/tools/${id}/moderation-status`, { status });
+  }
+
+
 }
 
 export const toolsService = new ToolsService();

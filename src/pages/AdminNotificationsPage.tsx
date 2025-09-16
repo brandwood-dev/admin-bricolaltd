@@ -54,7 +54,32 @@ const AdminNotificationsPage = () => {
     try {
       setLoading(true);
       const response = await apiClient.get('/admin/notifications');
-      setNotifications(response.data.data || []);
+      
+      let notificationsData: AdminNotification[] = [];
+      
+      if (response && response.data) {
+        // Vérifier si response.data.data existe (structure API standard)
+        if (response.data.data) {
+          if (Array.isArray(response.data.data)) {
+            notificationsData = response.data.data;
+          } else if (typeof response.data.data === 'object' && response.data.data !== null) {
+            // Si c'est un objet, vérifier s'il contient des notifications
+            const possibleArrays = Object.values(response.data.data).filter(val => Array.isArray(val));
+            if (possibleArrays.length > 0) {
+              notificationsData = possibleArrays[0] as AdminNotification[];
+            } else {
+              // Peut-être que l'objet contient directement les propriétés des notifications
+              notificationsData = [response.data.data] as AdminNotification[];
+            }
+          }
+        }
+        // Sinon, vérifier si response.data est directement un tableau
+        else if (Array.isArray(response.data)) {
+          notificationsData = response.data;
+        }
+      }
+      
+      setNotifications(notificationsData);
     } catch (error) {
       console.error('Erreur lors du chargement des notifications:', error);
       toast.error('Erreur lors du chargement des notifications');

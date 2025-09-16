@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,60 +20,110 @@ import {
 import { Card, CardContent } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { 
-  Plus, 
-  Image as ImageIcon, 
-  FileText, 
-  Video, 
-  Trash2, 
   Save,
   Eye,
   Upload,
+  Loader2,
+  AlertCircle,
+  Edit3,
+  X,
+  Plus,
   GripVertical,
   Type,
-  Edit3,
-  Loader2
+  AlignLeft,
+  Image,
+  Video,
+  Send,
+  Bold,
+  Italic,
+  Underline,
+  List,
+  ListOrdered,
+  Link,
+  Quote,
+  Code,
+  AlignCenter
 } from "lucide-react";
-import { newsService, News } from "@/services/newsService";
-
-// NewsCategory interface for static categories
-interface NewsCategory {
-  id: string;
-  name: string;
-  displayName: string;
-  description?: string;
-  createdAt: string;
-  updatedAt: string;
-}
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
+import { newsService, Category } from '../../services/newsService';
 import { useToast } from "@/hooks/use-toast";
 
 interface BlogEditorProps {
   article?: News | null;
   isOpen: boolean;
   onClose: () => void;
-  categories: NewsCategory[];
 }
 
-interface ContentBlock {
-  id: string;
-  type: 'text' | 'image' | 'video' | 'title';
-  content: string;
-  caption?: string;
-}
-
-const BlogEditor = ({ article, isOpen, onClose, categories }: BlogEditorProps) => {
+const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
   const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
   const [content, setContent] = useState("");
   const [imageUrl, setImageUrl] = useState("");
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const [useFileUpload, setUseFileUpload] = useState(false);
   const [categoryId, setCategoryId] = useState("");
-  const [isPublic, setIsPublic] = useState(false);
+  const [isPublic, setIsPublic] = useState(true);
   const [isFeatured, setIsFeatured] = useState(false);
-  const [loading, setSaving] = useState(false);
-  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
-  const [contentBlocks, setContentBlocks] = useState<ContentBlock[]>([
-    { id: '1', type: 'text', content: 'Commencez à écrire votre article ici...' }
-  ]);
+  const [loading, setLoading] = useState(false);
+  const [errors, setErrors] = useState<{[key: string]: string}>({});
+  const [additionalImages, setAdditionalImages] = useState<{file: File, url: string, name: string}[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [loadingCategories, setLoadingCategories] = useState(false);
   const { toast } = useToast();
+  
+  // Ref pour ReactQuill pour éviter le warning findDOMNode
+  const quillRef = useRef<ReactQuill>(null);
+
+  // ReactQuill modules configuration
+  const quillModules = {
+    toolbar: [
+      [{ 'header': [1, 2, 3, false] }],
+      ['bold', 'italic', 'underline', 'strike'],
+      [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+      ['blockquote', 'code-block'],
+      ['link', 'image'],
+      ['clean']
+    ],
+  };
+
+  const quillFormats = [
+    'header', 'bold', 'italic', 'underline', 'strike',
+    'list', 'bullet', 'blockquote', 'code-block',
+    'link', 'image'
+  ];
+
+  // Load categories from API
+  useEffect(() => {
+    const loadCategories = async () => {
+      if (!isOpen) return;
+      
+      setLoadingCategories(true);
+      try {
+        const response = await newsService.getCategories();
+        console.log('📂 [BlogEditor] Catégories chargées:', response.data);
+        
+        if (response.data?.data) {
+          setCategories(response.data.data);
+        } else {
+          console.warn('⚠️ [BlogEditor] Format de réponse inattendu pour les catégories:', response.data);
+          setCategories([]);
+        }
+      } catch (error) {
+        console.error('❌ [BlogEditor] Erreur lors du chargement des catégories:', error);
+        toast({
+          title: "Erreur",
+          description: "Impossible de charger les catégories",
+          variant: "destructive",
+        });
+        setCategories([]);
+      } finally {
+        setLoadingCategories(false);
+      }
+    };
+
+    loadCategories();
+  }, [isOpen, toast]);
 
   // Initialize form with article data when editing
   useEffect(() => {
@@ -82,350 +132,298 @@ const BlogEditor = ({ article, isOpen, onClose, categories }: BlogEditorProps) =
       setSummary(article.summary || "");
       setContent(article.content || "");
       setImageUrl(article.imageUrl || "");
-      setCategoryId(article.categoryId || "none");
-      setIsPublic(article.isPublic || false);
-      setIsFeatured(article.isFeatured || false);
-      // Parse content blocks from HTML content if needed
-      if (article.content) {
-        setContentBlocks([
-          { id: '1', type: 'text', content: article.content }
-        ]);
-      }
+      setCategoryId(article.categoryId || "");
+      setIsPublic(article.isPublic ?? true);
+      setIsFeatured(article.isFeatured ?? false);
     } else {
       // Reset form for new article
       setTitle("");
       setSummary("");
       setContent("");
       setImageUrl("");
-      setCategoryId("none");
-      setIsPublic(false);
+      setSelectedFiles([]);
+      setUseFileUpload(false);
+      setCategoryId("");
+      setIsPublic(true);
       setIsFeatured(false);
-      setContentBlocks([
-        { id: '1', type: 'text', content: 'Commencez à écrire votre article ici...' }
-      ]);
     }
+    setErrors({});
   }, [article, isOpen]);
 
-  const addContentBlock = (type: 'text' | 'image' | 'video' | 'title') => {
-    const newBlock: ContentBlock = {
-      id: Date.now().toString(),
-      type,
-      content: type === 'text' ? 'Nouveau paragraphe...' : 
-               type === 'title' ? 'Nouveau titre' : '',
-      caption: type !== 'text' && type !== 'title' ? '' : undefined
-    };
-    const updatedBlocks = [...contentBlocks, newBlock];
-    setContentBlocks(updatedBlocks);
-    // Update the main content field with HTML
-    setContent(convertBlocksToHTML(updatedBlocks));
-  };
-
-  const updateContentBlock = (id: string, field: string, value: string) => {
-    const updatedBlocks = contentBlocks.map(block => 
-      block.id === id ? { ...block, [field]: value } : block
-    );
-    setContentBlocks(updatedBlocks);
-    // Update the main content field with HTML
-    setContent(convertBlocksToHTML(updatedBlocks));
-  };
-
-  const removeContentBlock = (id: string) => {
-    const updatedBlocks = contentBlocks.filter(block => block.id !== id);
-    setContentBlocks(updatedBlocks);
-    // Update the main content field with HTML
-    setContent(convertBlocksToHTML(updatedBlocks));
-  };
-
-  const handleDragStart = (e: React.DragEvent, index: number) => {
-    setDraggedIndex(index);
-    e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/html', '');
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
-  };
-
-  const handleDragEnter = (e: React.DragEvent) => {
-    e.preventDefault();
-  };
-
-  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
-    e.preventDefault();
+  // Validation function - returns object with field-specific errors
+  const validateForm = () => {
+    console.log('🔍 [BlogEditor] validateForm - Début validation avec:', {
+      title: title ? `"${title.substring(0, 30)}..."` : 'VIDE',
+      titleLength: title?.length || 0,
+      content: content ? `"${content.substring(0, 50)}..."` : 'VIDE',
+      contentLength: content?.length || 0
+    });
     
-    if (draggedIndex === null || draggedIndex === dropIndex) {
-      setDraggedIndex(null);
-      return;
+    const fieldErrors: {[key: string]: string} = {};
+    
+    // Validation du titre
+    console.log('📝 [BlogEditor] Validation titre...');
+    if (!title || title.trim().length === 0) {
+      fieldErrors.title = "Le titre est obligatoire";
+      console.log('❌ [BlogEditor] Titre manquant');
+    } else if (title.trim().length < 3) {
+      fieldErrors.title = "Le titre doit contenir au moins 3 caractères";
+      console.log('❌ [BlogEditor] Titre trop court:', title.trim().length);
+    } else if (title.trim().length > 200) {
+      fieldErrors.title = "Le titre ne peut pas dépasser 200 caractères";
+      console.log('❌ [BlogEditor] Titre trop long:', title.trim().length);
+    } else {
+      console.log('✅ [BlogEditor] Titre valide');
     }
-
-    const newBlocks = [...contentBlocks];
-    const draggedBlock = newBlocks[draggedIndex];
     
-    // Remove the dragged block from its original position
-    newBlocks.splice(draggedIndex, 1);
+    // Validation du contenu
+    console.log('📄 [BlogEditor] Validation contenu...');
+    if (!content || content.trim().length === 0 || content === '<p><br></p>') {
+      fieldErrors.content = "Le contenu est obligatoire";
+      console.log('❌ [BlogEditor] Contenu manquant');
+    } else if (content.trim().length < 10) {
+      fieldErrors.content = "Le contenu doit contenir au moins 10 caractères";
+      console.log('❌ [BlogEditor] Contenu trop court:', content.trim().length);
+    } else {
+      console.log('✅ [BlogEditor] Contenu valide');
+    }
     
-    // Insert the dragged block at the new position
-    newBlocks.splice(dropIndex, 0, draggedBlock);
+    console.log('📊 [BlogEditor] validateForm - Résultat final:', {
+      errorsCount: Object.keys(fieldErrors).length,
+      errors: fieldErrors
+    });
     
-    setContentBlocks(newBlocks);
-    setDraggedIndex(null);
+    return fieldErrors;
   };
 
-  const handleDragEnd = () => {
-    setDraggedIndex(null);
-  };
-
-  const renderContentBlock = (block: ContentBlock, index: number) => {
-    const isDragging = draggedIndex === index;
+  // Validate individual field
+  const validateField = (fieldName: string, value: string) => {
+    const fieldErrors: {[key: string]: string} = {};
     
-    switch (block.type) {
+    switch (fieldName) {
       case 'title':
-        return (
-          <div key={block.id} className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div
-                  className="cursor-move hover:bg-gray-100 p-1 rounded"
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, index)}
-                  onDragEnd={handleDragEnd}
-                  title="Glisser pour réorganiser"
-                >
-                  <GripVertical className="h-4 w-4 text-gray-400" />
-                </div>
-                <Type className="h-4 w-4 text-gray-600" />
-                <span className="text-sm font-medium">Titre {index + 1}</span>
-              </div>
-              <Button 
-                variant="ghost" 
-                size="sm"
-                onClick={() => removeContentBlock(block.id)}
-              >
-                <Trash2 className="h-4 w-4 text-destructive" />
-              </Button>
-            </div>
-            <Input
-              value={block.content}
-              onChange={(e) => updateContentBlock(block.id, 'content', e.target.value)}
-              placeholder="Saisissez votre titre ici..."
-              className="font-bold text-lg"
-            />
-            {block.content && (
-              <div className="p-3 bg-gray-50 rounded-lg">
-                <p className="text-sm text-gray-600 mb-2">Aperçu :</p>
-                <h2 className="font-bold text-lg text-gray-900">{block.content}</h2>
-              </div>
-            )}
-          </div>
-        );
+        if (!value.trim()) {
+          fieldErrors.title = "Le titre est obligatoire";
+        }
+        break;
+      case 'content':
+        if (!value.trim() || value === '<p><br></p>') {
+          fieldErrors.content = "Le contenu est obligatoire";
+        }
+        break;
+    }
+    
+    return fieldErrors;
+  };
 
-      case 'text':
-        return (
-          <div key={block.id} className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div
-                  className="cursor-move hover:bg-gray-100 p-1 rounded"
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, index)}
-                  onDragEnd={handleDragEnd}
-                  title="Glisser pour réorganiser"
-                >
-                  <GripVertical className="h-4 w-4 text-gray-400" />
-                </div>
-                <FileText className="h-4 w-4 text-gray-600" />
-                <span className="text-sm font-medium">Bloc de texte {index + 1}</span>
-              </div>
-              <Button 
-                variant="ghost" 
-                size="sm"
-                onClick={() => removeContentBlock(block.id)}
-              >
-                <Trash2 className="h-4 w-4 text-destructive" />
-              </Button>
-            </div>
-            <Textarea
-              value={block.content}
-              onChange={(e) => updateContentBlock(block.id, 'content', e.target.value)}
-              placeholder="Rédigez le contenu de ce bloc..."
-              className="min-h-32"
-            />
-          </div>
-        );
 
-      case 'image':
-        return (
-          <div key={block.id} className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div
-                  className="cursor-move hover:bg-gray-100 p-1 rounded"
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, index)}
-                  onDragEnd={handleDragEnd}
-                  title="Glisser pour réorganiser"
-                >
-                  <GripVertical className="h-4 w-4 text-gray-400" />
-                </div>
-                <ImageIcon className="h-4 w-4 text-gray-600" />
-                <span className="text-sm font-medium">Image {index + 1}</span>
-              </div>
-              <Button 
-                variant="ghost" 
-                size="sm"
-                onClick={() => removeContentBlock(block.id)}
-              >
-                <Trash2 className="h-4 w-4 text-destructive" />
-              </Button>
-            </div>
-            <div className="space-y-3">
-              <Input
-                value={block.content}
-                onChange={(e) => updateContentBlock(block.id, 'content', e.target.value)}
-                placeholder="URL de l'image ou uploader..."
-              />
-              {block.content && block.content.startsWith('http') && (
-                <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden">
-                  <img 
-                    src={block.content} 
-                    alt="Preview"
-                    className="w-full h-full object-cover"
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                    }}
-                  />
-                </div>
-              )}
-              <Input
-                value={block.caption || ''}
-                onChange={(e) => updateContentBlock(block.id, 'caption', e.target.value)}
-                placeholder="Légende de l'image (optionnel)"
-              />
-            </div>
-          </div>
-        );
 
-      case 'video':
-        return (
-          <div key={block.id} className="space-y-2">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div
-                  className="cursor-move hover:bg-gray-100 p-1 rounded"
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, index)}
-                  onDragEnd={handleDragEnd}
-                  title="Glisser pour réorganiser"
-                >
-                  <GripVertical className="h-4 w-4 text-gray-400" />
-                </div>
-                <Video className="h-4 w-4 text-gray-600" />
-                <span className="text-sm font-medium">Vidéo {index + 1}</span>
-              </div>
-              <Button 
-                variant="ghost" 
-                size="sm"
-                onClick={() => removeContentBlock(block.id)}
-              >
-                <Trash2 className="h-4 w-4 text-destructive" />
-              </Button>
-            </div>
-            <div className="space-y-3">
-              <Input
-                value={block.content}
-                onChange={(e) => updateContentBlock(block.id, 'content', e.target.value)}
-                placeholder="URL de la vidéo (YouTube, Vimeo...)"
-              />
-              <Input
-                value={block.caption || ''}
-                onChange={(e) => updateContentBlock(block.id, 'caption', e.target.value)}
-                placeholder="Description de la vidéo (optionnel)"
-              />
-            </div>
-          </div>
-        );
-
-      default:
-        return null;
+  // Fonction pour gérer l'upload d'image de couverture
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        setImageUrl(e.target?.result as string);
+      };
+      reader.readAsDataURL(file);
     }
   };
 
-  // Convert content blocks to HTML
-  const convertBlocksToHTML = (blocks: ContentBlock[]): string => {
-    return blocks.map(block => {
-      switch (block.type) {
-        case 'title':
-          return `<h2>${block.content}</h2>`;
-        case 'text':
-          return `<p>${block.content.replace(/\n/g, '<br>')}</p>`;
-        case 'image':
-          return `<div class="image-block"><img src="${block.content}" alt="${block.caption || ''}" />${block.caption ? `<p class="caption">${block.caption}</p>` : ''}</div>`;
-        case 'video':
-          return `<div class="video-block"><iframe src="${block.content}" frameborder="0" allowfullscreen></iframe>${block.caption ? `<p class="caption">${block.caption}</p>` : ''}</div>`;
-        default:
-          return '';
+
+
+  // Handle field changes with validation
+  const handleTitleChange = (value: string) => {
+    setTitle(value);
+    const fieldErrors = validateField('title', value);
+    setErrors(prev => {
+      const newErrors = { ...prev };
+      if (fieldErrors.title) {
+        newErrors.title = fieldErrors.title;
+      } else {
+        delete newErrors.title;
       }
-    }).join('\n');
+      return newErrors;
+    });
+  };
+
+  const handleContentChange = (value: string) => {
+    setContent(value);
+    const fieldErrors = validateField('content', value);
+    setErrors(prev => {
+      const newErrors = { ...prev };
+      if (fieldErrors.content) {
+        newErrors.content = fieldErrors.content;
+      } else {
+        delete newErrors.content;
+      }
+      return newErrors;
+    });
   };
 
   const handleSave = async (isDraft: boolean = false) => {
-    if (!title.trim()) {
-      toast({
-        title: "Erreur",
-        description: "Le titre est obligatoire.",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setSaving(true);
-    
     try {
-      const htmlContent = convertBlocksToHTML(contentBlocks);
+      console.log('🚀 [BlogEditor] Début de handleSave avec paramètres:', {
+        isDraft,
+        articleId: article?.id,
+        title: title?.substring(0, 50) + '...',
+        contentLength: content?.length,
+        selectedFilesCount: selectedFiles?.length || 0
+      });
       
-      const newsData = {
+      setLoading(true);
+      
+      // Validation complète des champs
+      console.log('🔍 [BlogEditor] Début de la validation...');
+      const fieldErrors = validateForm();
+      console.log('📋 [BlogEditor] Résultat de la validation:', {
+        errorsCount: Object.keys(fieldErrors).length,
+        errors: fieldErrors
+      });
+      
+      if (Object.keys(fieldErrors).length > 0) {
+        setErrors(fieldErrors);
+        console.log('❌ [BlogEditor] Validation échouée, arrêt du processus');
+        toast({
+          title: "Erreur de validation",
+          description: "Veuillez corriger les erreurs dans le formulaire",
+          variant: "destructive"
+        });
+        return;
+      }
+      
+      // Clear errors if validation passes
+      setErrors({});
+      console.log('✅ [BlogEditor] Validation réussie, préparation des données...');
+
+      // Préparation des données selon le DTO de l'API
+      const newsData: any = {
         title: title.trim(),
-        content: htmlContent,
-        summary: summary.trim(),
-        imageUrl: imageUrl.trim() || undefined,
-        categoryId: categoryId === 'none' ? undefined : categoryId || undefined,
+        content: content.trim(),
         isPublic: isDraft ? false : isPublic,
         isFeatured: isFeatured
       };
-
-      let response;
-      if (article) {
-        // Update existing article
-        response = await newsService.updateNews(article.id, newsData);
-      } else {
-        // Create new article
-        response = await newsService.createNews(newsData);
+      
+      // Champs optionnels
+      if (summary.trim()) {
+        newsData.summary = summary.trim();
+      }
+      
+      if (categoryId && categoryId !== 'none') {
+        newsData.categoryId = categoryId;
+      }
+      
+      // Images additionnelles (si supportées par l'API)
+      if (additionalImages.length > 0) {
+        newsData.additionalImages = additionalImages.map(img => img.url);
       }
 
-      if (response.success) {
+      console.log('📦 [BlogEditor] Données préparées:', {
+        newsData: {
+          ...newsData,
+          content: newsData.content?.substring(0, 100) + '...' // Tronquer le contenu pour les logs
+        },
+        selectedFilesInfo: selectedFiles?.map(f => ({ name: f.name, size: f.size, type: f.type })) || []
+      });
+
+      console.log('🌐 [BlogEditor] Appel API en cours...');
+      let response;
+      if (article?.id) {
+        console.log('🔄 [BlogEditor] Mise à jour article existant, ID:', article.id);
+        response = await newsService.updateNews(article.id, newsData, selectedFiles);
+      } else {
+        console.log('➕ [BlogEditor] Création nouvel article');
+        response = await newsService.createNews(newsData, selectedFiles);
+      }
+
+      console.log('📡 [BlogEditor] Réponse API reçue:', {
+        status: response?.status,
+        hasData: !!response?.data,
+        hasDataData: !!response?.data?.data,
+        responseStructure: {
+          data: response?.data ? Object.keys(response.data) : 'N/A',
+          dataData: response?.data?.data ? Object.keys(response.data.data) : 'N/A'
+        }
+      });
+
+      // Vérification de la structure de réponse API
+      if (response?.data) {
+        console.log('✅ [BlogEditor] Sauvegarde réussie!');
         toast({
           title: "Succès",
-          description: article 
-            ? "Article mis à jour avec succès." 
-            : isDraft 
-              ? "Article enregistré comme brouillon." 
-              : "Article publié avec succès.",
+          description: article?.id 
+            ? "Article mis à jour avec succès" 
+            : "Article créé avec succès",
+          variant: "default"
         });
+        
+        // Fermer le modal
         onClose();
       } else {
-        throw new Error(response.error || 'Erreur lors de la sauvegarde');
+        console.log('❌ [BlogEditor] Format de réponse API inattendu');
+        throw new Error("Format de réponse API inattendu");
       }
-    } catch (error) {
-      console.error('Error saving article:', error);
+      
+    } catch (error: any) {
+      console.error('💥 [BlogEditor] Erreur lors de la sauvegarde:', {
+        message: error?.message,
+        status: error?.response?.status,
+        statusText: error?.response?.statusText,
+        responseData: error?.response?.data,
+        fullError: error
+      });
+      
+      // Messages d'erreur spécifiques selon le type d'erreur
+      let errorMessage = "Une erreur inattendue s'est produite";
+      
+      if (error.response?.status === 400) {
+        errorMessage = "Données invalides. Vérifiez les champs obligatoires.";
+      } else if (error.response?.status === 401) {
+        errorMessage = "Session expirée. Veuillez vous reconnecter.";
+      } else if (error.response?.status === 403) {
+        errorMessage = "Vous n'avez pas les permissions nécessaires.";
+      } else if (error.response?.status === 413) {
+        errorMessage = "Les fichiers sont trop volumineux.";
+      } else if (error.response?.status === 500) {
+        errorMessage = "Erreur serveur. Veuillez réessayer plus tard.";
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
       toast({
-        title: "Erreur",
-        description: "Impossible de sauvegarder l'article.",
+        title: "Erreur lors de la sauvegarde",
+        description: errorMessage,
         variant: "destructive"
       });
     } finally {
-      setSaving(false);
+      setLoading(false);
     }
+  };
+
+  // Fonction pour gérer l'upload d'images additionnelles
+  const handleAdditionalImagesUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files) {
+      const newImages = Array.from(files).map(file => ({
+        file,
+        url: URL.createObjectURL(file),
+        name: file.name
+      }));
+      setAdditionalImages(prev => [...prev, ...newImages]);
+    }
+  };
+
+  // Fonction pour supprimer une image additionnelle
+  const removeAdditionalImage = (index: number) => {
+    setAdditionalImages(prev => {
+      const updated = [...prev];
+      // Libérer l'URL de l'objet pour éviter les fuites mémoire
+      if (updated[index].url.startsWith('blob:')) {
+        URL.revokeObjectURL(updated[index].url);
+      }
+      updated.splice(index, 1);
+      return updated;
+    });
   };
 
   return (
@@ -451,55 +449,87 @@ const BlogEditor = ({ article, isOpen, onClose, categories }: BlogEditorProps) =
                   <h3 className="font-semibold">Informations générales</h3>
                   
                   <div className="space-y-2">
-                    <Label htmlFor="title">Titre</Label>
+                    <Label htmlFor="title">Titre de l'article *</Label>
                     <Input
                       id="title"
                       value={title}
-                      onChange={(e) => setTitle(e.target.value)}
-                      placeholder="Titre de l'article"
+                      onChange={(e) => handleTitleChange(e.target.value)}
+                      onBlur={(e) => handleTitleChange(e.target.value)}
+                      placeholder="Saisissez le titre de votre article..."
+                      className={`font-medium ${errors.title ? 'border-red-500 focus:border-red-500' : ''}`}
                     />
+                    {errors.title && (
+                      <div className="flex items-center gap-1 text-red-500 text-sm">
+                        <AlertCircle className="h-4 w-4" />
+                        <span>{errors.title}</span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="summary">Résumé</Label>
+                    <Label htmlFor="summary">Résumé (optionnel)</Label>
                     <Textarea
                       id="summary"
                       value={summary}
                       onChange={(e) => setSummary(e.target.value)}
-                      placeholder="Résumé de l'article..."
+                      placeholder="Résumé court de l'article..."
                       rows={3}
                     />
                   </div>
 
                   <div className="space-y-2">
                     <Label htmlFor="category">Catégorie</Label>
-                    <Select value={categoryId} onValueChange={setCategoryId}>
+                    <Select value={categoryId} onValueChange={setCategoryId} disabled={loadingCategories}>
                       <SelectTrigger>
-                        <SelectValue placeholder="Sélectionner une catégorie" />
+                        <SelectValue placeholder={loadingCategories ? "Chargement..." : "Sélectionner une catégorie"} />
                       </SelectTrigger>
                       <SelectContent>
-                    <SelectItem value="none">Aucune catégorie</SelectItem>
-                    {categories.map((category) => (
-                      <SelectItem key={category.id} value={category.id}>
-                        {category.displayName}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
+                        <SelectItem value="none">Aucune catégorie</SelectItem>
+                        {categories.map((category) => (
+                          <SelectItem key={category.id} value={category.id}>
+                            {category.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
                     </Select>
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="imageUrl">Image de couverture</Label>
-                    <Input
-                      id="imageUrl"
-                      value={imageUrl}
-                      onChange={(e) => setImageUrl(e.target.value)}
-                      placeholder="URL de l'image"
-                    />
+                    <Label>Image de couverture</Label>
+                    
+                    <div className="space-y-2">
+                      <Input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const files = e.target.files;
+                          if (files && files.length > 0) {
+                            setSelectedFiles([files[0]]);
+                          }
+                        }}
+                      />
+                      {selectedFiles.length > 0 && (
+                        <p className="text-sm text-gray-600">
+                          Fichier sélectionné: {selectedFiles[0].name}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* Preview */}
                     {imageUrl && (
                       <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden">
                         <img 
                           src={imageUrl} 
+                          alt="Cover preview"
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    )}
+                    
+                    {selectedFiles.length > 0 && (
+                      <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden">
+                        <img 
+                          src={URL.createObjectURL(selectedFiles[0])} 
                           alt="Cover preview"
                           className="w-full h-full object-cover"
                         />
@@ -528,43 +558,39 @@ const BlogEditor = ({ article, isOpen, onClose, categories }: BlogEditorProps) =
                 </CardContent>
               </Card>
 
-              {/* Content blocks toolbar */}
+              {/* Images additionnelles */}
               <Card>
                 <CardContent className="p-4">
-                  <h3 className="font-semibold mb-3">Ajouter du contenu</h3>
-                  <div className="space-y-2">
-                    <Button 
-                      variant="outline" 
-                      className="w-full justify-start hover-scale"
-                      onClick={() => addContentBlock('title')}
-                    >
-                      <Type className="h-4 w-4 mr-2" />
-                      Titre
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      className="w-full justify-start hover-scale"
-                      onClick={() => addContentBlock('text')}
-                    >
-                      <FileText className="h-4 w-4 mr-2" />
-                      Bloc de texte
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      className="w-full justify-start hover-scale"
-                      onClick={() => addContentBlock('image')}
-                    >
-                      <ImageIcon className="h-4 w-4 mr-2" />
-                      Image
-                    </Button>
-                    <Button 
-                      variant="outline" 
-                      className="w-full justify-start hover-scale"
-                      onClick={() => addContentBlock('video')}
-                    >
-                      <Video className="h-4 w-4 mr-2" />
-                      Vidéo
-                    </Button>
+                  <h3 className="font-semibold mb-3">Images additionnelles</h3>
+                  <div className="space-y-3">
+                    <Input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handleAdditionalImagesUpload}
+                    />
+                    
+                    {additionalImages.length > 0 && (
+                      <div className="grid grid-cols-2 gap-2">
+                        {additionalImages.map((image, index) => (
+                          <div key={index} className="relative">
+                            <img 
+                              src={image.url} 
+                              alt={`Additional ${index + 1}`}
+                              className="w-full h-20 object-cover rounded"
+                            />
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              className="absolute top-1 right-1 h-6 w-6 p-0"
+                              onClick={() => removeAdditionalImage(index)}
+                            >
+                              <X className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
@@ -572,40 +598,30 @@ const BlogEditor = ({ article, isOpen, onClose, categories }: BlogEditorProps) =
 
             {/* Main content area */}
             <div className="lg:col-span-2 space-y-4 order-1 lg:order-2">
-              <h3 className="font-semibold text-base sm:text-lg">Contenu de l'article</h3>
-              
-              <div className="space-y-6">
-                {contentBlocks.map((block, index) => {
-                  const isDragging = draggedIndex === index;
-                  return (
-                    <div
-                      key={block.id}
-                      className={`transition-all duration-200 ${isDragging ? 'opacity-50 scale-95' : ''}`}
-                      onDragOver={handleDragOver}
-                      onDragEnter={handleDragEnter}
-                      onDrop={(e) => handleDrop(e, index)}
-                    >
-                      <Card className={`hover:shadow-md transition-shadow ${isDragging ? 'border-primary border-2' : ''}`}>
-                        <CardContent className="p-4">
-                          {renderContentBlock(block, index)}
-                        </CardContent>
-                      </Card>
+              <div className="space-y-4">
+                {/* Contenu avec ReactQuill */}
+                <div className="space-y-2">
+                  <Label>Contenu de l'article *</Label>
+                  <div className={`border rounded-lg ${errors.content ? 'border-red-500' : ''}`}>
+                    <ReactQuill
+                      ref={quillRef}
+                      value={content}
+                      onChange={handleContentChange}
+                      onBlur={() => handleContentChange(content)}
+                      modules={quillModules}
+                      formats={quillFormats}
+                      placeholder="Rédigez le contenu de votre article..."
+                      style={{ minHeight: '400px' }}
+                    />
+                  </div>
+                  {errors.content && (
+                    <div className="flex items-center gap-1 text-red-500 text-sm">
+                      <AlertCircle className="h-4 w-4" />
+                      <span>{errors.content}</span>
                     </div>
-                  );
-                })}
+                  )}
+                </div>
               </div>
-
-              {contentBlocks.length === 0 && (
-                <Card>
-                  <CardContent className="p-8 text-center">
-                    <div className="text-gray-500">
-                      <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <p>Aucun contenu ajouté</p>
-                      <p className="text-sm">Utilisez les boutons à gauche pour ajouter du contenu</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              )}
             </div>
           </div>
         </div>

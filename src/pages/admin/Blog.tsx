@@ -46,22 +46,15 @@ import {
   Loader2,
   Star,
   Globe,
-  EyeOff
+  EyeOff,
+  Filter
 } from "lucide-react";
 import { BlogEditor } from "@/components/admin/BlogEditor";
 import { DateRange } from "react-day-picker";
-import { newsService, News } from "@/services/newsService";
+import { newsService, News, Category } from "@/services/newsService";
 import { useToast } from "@/hooks/use-toast";
 
-// NewsCategory interface for static categories
-export interface NewsCategory {
-  id: string;
-  name: string;
-  displayName: string;
-  description?: string;
-  createdAt: string;
-  updatedAt: string;
-}
+// Using Category interface from newsService
 
 const Blog = () => {
   const [searchTerm, setSearchTerm] = useState("");
@@ -75,11 +68,22 @@ const Blog = () => {
   const [loading, setLoading] = useState(true);
   const [totalItems, setTotalItems] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
-  const itemsPerPage = 10;
+  
+  // Pagination states
+  const [totalArticles, setTotalArticles] = useState(0);
+  const [itemsPerPage] = useState(10);
+  
+  // Delete confirmation states
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [articleToDelete, setArticleToDelete] = useState<News | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  
+  // Loading states for individual actions
+  const [loadingActions, setLoadingActions] = useState<{[key: string]: boolean}>({});
   const { toast } = useToast();
 
   // Dynamic categories - will be loaded from news category service
-  const [categories, setCategories] = useState<NewsCategory[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
 
   const getStatusBadge = (article: News) => {
     if (article.isFeatured) {
@@ -91,26 +95,48 @@ const Blog = () => {
     return <Badge variant="secondary">Brouillon</Badge>;
   };
 
-  // Load categories - using static categories since news categories don't exist in backend yet
+  // Load categories from database
   const loadCategories = async () => {
-    // For now, use static categories since news categories don't exist in backend yet
-    setCategories([
-      { id: '1', name: 'general', displayName: 'Général', description: 'Articles généraux', createdAt: '', updatedAt: '' },
-      { id: '2', name: 'announcements', displayName: 'Annonces', description: 'Annonces importantes', createdAt: '', updatedAt: '' },
-      { id: '3', name: 'updates', displayName: 'Mises à jour', description: 'Mises à jour du site', createdAt: '', updatedAt: '' },
-      { id: '4', name: 'events', displayName: 'Événements', description: 'Événements et actualités', createdAt: '', updatedAt: '' },
-      { id: '5', name: 'tools', displayName: 'Outils', description: 'Nouveaux outils disponibles', createdAt: '', updatedAt: '' },
-      { id: '6', name: 'tips', displayName: 'Conseils', description: 'Conseils et astuces', createdAt: '', updatedAt: '' }
-    ]);
+    try {
+      const response = await newsService.getCategories();
+      if (response.data?.data) {
+        setCategories(response.data.data);
+      } else if (response.data) {
+        setCategories(response.data);
+      } else {
+        console.warn('Failed to load categories, using fallback');
+        setCategories([]);
+      }
+    } catch (error) {
+      console.error('Error loading categories:', error);
+      toast({
+        title: "Avertissement",
+        description: "Impossible de charger les catégories depuis la base de données.",
+        variant: "destructive"
+      });
+      setCategories([]);
+    }
   };
 
-  // Load articles from API
-  const loadArticles = async () => {
+  // Load articles from API with pagination
+  const loadArticles = async (page: number = currentPage) => {
     try {
       setLoading(true);
-      const response = await newsService.getAllNews(searchTerm || undefined);
+      const response = await newsService.getNews({
+        page,
+        limit: itemsPerPage,
+        search: searchTerm || undefined,
+        isPublic: statusFilter === 'published' ? true : statusFilter === 'draft' ? false : undefined,
+        isFeatured: statusFilter === 'featured' ? true : undefined,
+        categoryId: categoryFilter && categoryFilter !== 'all' ? categoryFilter : undefined
+      });
+      
       if (response.success && response.data) {
-        setArticles(response.data);
+        // Handle both direct properties and meta object structure
+        setArticles(response.data.data || []);
+        setTotalPages(response.data.totalPages || response.data.meta?.totalPages || 1);
+        setTotalArticles(response.data.total || response.data.meta?.total || 0);
+        setCurrentPage(page);
       }
     } catch (error) {
       console.error('Error loading articles:', error);
@@ -131,19 +157,31 @@ const Blog = () => {
 
   // Load articles on component mount and when search term changes
   useEffect(() => {
-    loadArticles();
-  }, [searchTerm]);
+    loadArticles(1); // Reset to first page when search changes
+  }, [searchTerm, statusFilter, categoryFilter]);
 
-  // Handle article deletion
-  const handleDeleteArticle = async (id: string) => {
+  // Handle delete article click (open confirmation dialog)
+  const handleDeleteClick = (article: News) => {
+    setArticleToDelete(article);
+    setIsDeleteDialogOpen(true);
+  };
+  
+  // Handle confirmed article deletion
+  const handleConfirmDelete = async () => {
+    if (!articleToDelete) return;
+    
+    const articleTitle = articleToDelete.title;
     try {
-      const response = await newsService.deleteNews(id);
+      setIsDeleting(true);
+      const response = await newsService.deleteNews(articleToDelete.id);
       if (response.success) {
         toast({
           title: "Succès",
-          description: "Article supprimé avec succès.",
+          description: `L'article "${articleTitle}" a été supprimé avec succès.`,
         });
         loadArticles(); // Reload articles
+        setIsDeleteDialogOpen(false);
+        setArticleToDelete(null);
       }
     } catch (error) {
       console.error('Error deleting article:', error);
@@ -152,17 +190,26 @@ const Blog = () => {
         description: "Impossible de supprimer l'article.",
         variant: "destructive"
       });
+    } finally {
+      setIsDeleting(false);
     }
+  };
+  
+  // Handle cancel delete
+  const handleCancelDelete = () => {
+    setIsDeleteDialogOpen(false);
+    setArticleToDelete(null);
   };
 
   // Handle toggle featured status
   const handleToggleFeatured = async (id: string) => {
     try {
+      setLoadingActions(prev => ({ ...prev, [`featured-${id}`]: true }));
       const response = await newsService.toggleFeatured(id);
       if (response.success) {
         toast({
           title: "Succès",
-          description: "Statut vedette mis à jour.",
+          description: "Statut vedette mis à jour avec succès.",
         });
         loadArticles(); // Reload articles
       }
@@ -170,20 +217,23 @@ const Blog = () => {
       console.error('Error toggling featured status:', error);
       toast({
         title: "Erreur",
-        description: "Impossible de mettre à jour le statut.",
+        description: "Impossible de mettre à jour le statut vedette.",
         variant: "destructive"
       });
+    } finally {
+      setLoadingActions(prev => ({ ...prev, [`featured-${id}`]: false }));
     }
   };
 
   // Handle toggle public status
   const handleTogglePublic = async (id: string) => {
     try {
+      setLoadingActions(prev => ({ ...prev, [`public-${id}`]: true }));
       const response = await newsService.togglePublic(id);
       if (response.success) {
         toast({
           title: "Succès",
-          description: "Statut de publication mis à jour.",
+          description: "Statut de publication mis à jour avec succès.",
         });
         loadArticles(); // Reload articles
       }
@@ -191,9 +241,11 @@ const Blog = () => {
       console.error('Error toggling public status:', error);
       toast({
         title: "Erreur",
-        description: "Impossible de mettre à jour le statut.",
+        description: "Impossible de mettre à jour le statut de publication.",
         variant: "destructive"
       });
+    } finally {
+      setLoadingActions(prev => ({ ...prev, [`public-${id}`]: false }));
     }
   };
 
@@ -207,36 +259,10 @@ const Blog = () => {
     setIsEditorOpen(true);
   };
 
-  // Filtrage des articles
-  const filteredArticles = articles.filter(article => {
-    const matchesSearch = article.title.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    let matchesStatus = true;
-    if (statusFilter === "published") {
-      matchesStatus = article.isPublic;
-    } else if (statusFilter === "draft") {
-      matchesStatus = !article.isPublic;
-    } else if (statusFilter === "featured") {
-      matchesStatus = article.isFeatured;
-    }
-    
-    const matchesCategory = categoryFilter === "all" || 
-                           (article.categoryId && article.categoryId === categoryFilter);
-    
-    let matchesDate = true;
-    if (dateRange?.from) {
-      const articleDate = new Date(article.createdAt);
-      matchesDate = articleDate >= dateRange.from && 
-                   (!dateRange.to || articleDate <= dateRange.to);
-    }
-    
-    return matchesSearch && matchesStatus && matchesCategory && matchesDate;
-  });
-
-  // Pagination
-  const totalFilteredPages = Math.ceil(filteredArticles.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedArticles = filteredArticles.slice(startIndex, startIndex + itemsPerPage);
+  // Since we're using server-side pagination, we don't need client-side filtering
+  // The filtering is handled by the API call in loadArticles
+  const filteredArticles = articles;
+  const paginatedArticles = articles;
 
   // Reset page when filters change
   useEffect(() => {
@@ -279,7 +305,7 @@ const Blog = () => {
             </div>
             <div className="flex items-center gap-2">
               <Tag className="h-4 w-4" />
-              {categories.find(cat => cat.id === article.categoryId)?.displayName || 'Non catégorisé'}
+              {categories.find(cat => cat.id === article.categoryId)?.name || 'Non catégorisé'}
             </div>
             {article.isFeatured && (
               <Badge className="bg-yellow-500 text-white">En vedette</Badge>
@@ -370,7 +396,7 @@ const Blog = () => {
                     <SelectItem value="all">Toutes les catégories</SelectItem>
                     {categories.map((category) => (
                       <SelectItem key={category.id} value={category.id}>
-                        {category.displayName}
+                        {category.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -382,7 +408,7 @@ const Blog = () => {
           {/* Articles Table */}
           <Card>
             <CardHeader>
-              <CardTitle>Articles ({filteredArticles.length})</CardTitle>
+              <CardTitle>Articles ({totalArticles})</CardTitle>
             </CardHeader>
             <CardContent>
               {loading ? (
@@ -435,7 +461,7 @@ const Blog = () => {
                               </TableCell>
                               <TableCell className="hidden md:table-cell">
                                 <Badge variant="outline">
-                                  {categories.find(cat => cat.id === article.categoryId)?.displayName || 'Non catégorisé'}
+                                  {categories.find(cat => cat.id === article.categoryId)?.name || 'Non catégorisé'}
                                 </Badge>
                               </TableCell>
                               <TableCell>{getStatusBadge(article)}</TableCell>
@@ -462,8 +488,13 @@ const Blog = () => {
                                     onClick={() => handleTogglePublic(article.id)}
                                     title={article.isPublic ? "Dépublier" : "Publier"}
                                     className={article.isPublic ? "text-green-600 hover:text-green-700" : "text-gray-400 hover:text-green-600"}
+                                    disabled={loadingActions[`public-${article.id}`]}
                                   >
-                                    {article.isPublic ? <Globe className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
+                                    {loadingActions[`public-${article.id}`] ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      article.isPublic ? <Globe className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />
+                                    )}
                                   </Button>
                                   <Button 
                                     variant="ghost" 
@@ -471,13 +502,18 @@ const Blog = () => {
                                     onClick={() => handleToggleFeatured(article.id)}
                                     title={article.isFeatured ? "Retirer de la vedette" : "Mettre en vedette"}
                                     className={article.isFeatured ? "text-yellow-600 hover:text-yellow-700" : "text-gray-400 hover:text-yellow-600"}
+                                    disabled={loadingActions[`featured-${article.id}`]}
                                   >
-                                    <Star className={`h-4 w-4 ${article.isFeatured ? 'fill-current' : ''}`} />
+                                    {loadingActions[`featured-${article.id}`] ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <Star className={`h-4 w-4 ${article.isFeatured ? 'fill-current' : ''}`} />
+                                    )}
                                   </Button>
                                   <Button 
                                     variant="ghost" 
                                     size="sm"
-                                    onClick={() => handleDeleteArticle(article.id)}
+                                    onClick={() => handleDeleteClick(article)}
                                     title="Supprimer"
                                   >
                                     <Trash2 className="h-4 w-4 text-destructive" />
@@ -491,31 +527,68 @@ const Blog = () => {
                     </Table>
                   </div>
 
-                  {/* Pagination */}
-                  <div className="flex items-center justify-between mt-6">
-                    <div className="text-sm text-gray-500">
-                      Affichage de {startIndex + 1} à {Math.min(startIndex + itemsPerPage, filteredArticles.length)} sur {filteredArticles.length} articles
+                  {/* Pagination Controls */}
+                  {totalPages > 1 && (
+                    <div className="flex items-center justify-between mt-6">
+                      <div className="text-sm text-gray-500">
+                        Affichage de {((currentPage - 1) * itemsPerPage) + 1} à {Math.min(currentPage * itemsPerPage, totalArticles)} sur {totalArticles} articles
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => loadArticles(currentPage - 1)}
+                          disabled={currentPage <= 1 || loading}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                          Précédent
+                        </Button>
+                        
+                        <div className="flex items-center gap-1">
+                          {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                            let pageNum;
+                            if (totalPages <= 5) {
+                              pageNum = i + 1;
+                            } else if (currentPage <= 3) {
+                              pageNum = i + 1;
+                            } else if (currentPage >= totalPages - 2) {
+                              pageNum = totalPages - 4 + i;
+                            } else {
+                              pageNum = currentPage - 2 + i;
+                            }
+                            
+                            return (
+                              <Button
+                                key={pageNum}
+                                variant={currentPage === pageNum ? "default" : "outline"}
+                                size="sm"
+                                onClick={() => loadArticles(pageNum)}
+                                disabled={loading}
+                                className="w-8 h-8 p-0"
+                              >
+                                {pageNum}
+                              </Button>
+                            );
+                          })}
+                        </div>
+                        
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => loadArticles(currentPage + 1)}
+                          disabled={currentPage >= totalPages || loading}
+                        >
+                          Suivant
+                          <ChevronRight className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                        disabled={currentPage === 1}
-                      >
-                        <ChevronLeft className="h-4 w-4" />
-                      </Button>
-                      <span className="text-sm">
-                        Page {currentPage} sur {totalFilteredPages}
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalFilteredPages))}
-                        disabled={currentPage === totalFilteredPages}
-                      >
-                        <ChevronRight className="h-4 w-4" />
-                      </Button>
+                  )}
+                  
+                  {/* Affichage du total */}
+                  <div className="flex items-center justify-center mt-4">
+                    <div className="text-sm text-gray-500">
+                      Total: {totalArticles} articles
                     </div>
                   </div>
                 </>
@@ -533,7 +606,7 @@ const Blog = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {categories.map((category) => (
                   <div key={category.id} className="p-4 border rounded-lg flex justify-between items-center">
-                    <span className="font-medium">{category.displayName}</span>
+                    <span className="font-medium">{category.name}</span>
                     <div className="flex gap-2">
                       <Button variant="ghost" size="sm">
                         <Edit className="h-4 w-4" />
@@ -565,9 +638,48 @@ const Blog = () => {
             setIsEditorOpen(false);
             loadArticles(); // Reload articles after editing
           }}
-          categories={categories}
         />
       )}
+      
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Confirmer la suppression</DialogTitle>
+            <DialogDescription>
+              Êtes-vous sûr de vouloir supprimer l'article <strong>"{articleToDelete?.title}"</strong> ?
+              <br />
+              Cette action est irréversible.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-3 mt-6">
+            <Button
+              variant="outline"
+              onClick={handleCancelDelete}
+              disabled={isDeleting}
+            >
+              Annuler
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  Suppression...
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Supprimer
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

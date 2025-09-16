@@ -17,7 +17,6 @@ export enum ToolStatus {
   DRAFT = 'DRAFT',
   PUBLISHED = 'PUBLISHED',
   UNDER_REVIEW = 'UNDER_REVIEW',
-  REJECTED = 'REJECTED',
   ARCHIVED = 'ARCHIVED',
 }
 
@@ -87,6 +86,12 @@ export enum ActivityType {
   DELETE_ACCOUNT_PERMANENTLY = 'DELETE_ACCOUNT_PERMANENTLY',
   BAN_USER = 'BAN_USER',
   UNBAN_USER = 'UNBAN_USER',
+}
+
+export enum ModerationStatus {
+  PENDING = 'PENDING',
+  CONFIRMED = 'CONFIRMED',
+  REJECTED = 'REJECTED',
 }
 
 export enum DocumentType {
@@ -211,6 +216,7 @@ export interface Tool extends BaseEntity {
   imageUrl?: string;
   toolStatus: ToolStatus;
   availabilityStatus: AvailabilityStatus;
+  moderationStatus?: ModerationStatus;
   publishedAt?: Date | string;
   moderatedAt?: Date | string;
   

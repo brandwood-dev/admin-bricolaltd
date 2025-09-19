@@ -22,6 +22,8 @@ import Profile from "./pages/admin/Profile";
 import Analytics from "./pages/admin/Analytics";
 import Transactions from "./pages/admin/Transactions";
 import Settings from "./pages/admin/Settings";
+import Security from "./pages/admin/Security";
+import Reviews from "./pages/admin/Reviews";
 
 const queryClient = new QueryClient();
 
@@ -129,6 +131,22 @@ const App = () => (
                 element={
                   <ProtectedRoute requiredPermission="manage_notifications">
                     <AdminNotificationsPage />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="security" 
+                element={
+                  <ProtectedRoute requiredPermission="manage_security">
+                    <Security />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="reviews" 
+                element={
+                  <ProtectedRoute requiredPermission="manage_reviews">
+                    <Reviews />
                   </ProtectedRoute>
                 } 
               />

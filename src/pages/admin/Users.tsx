@@ -105,13 +105,14 @@ const Users = () => {
         dateTo: filters?.dateTo
       };
       const response = await userService.getUsers(params);
+      console.log('API Response structure:', response.data);
       return {
         data: response.data?.data || [],
         pagination: {
-          page: response.data?.pagination?.page || 1,
-          pageSize: response.data?.pagination?.limit || pageSize,
-          total: response.data?.pagination?.total || 0,
-          totalPages: response.data?.pagination?.totalPages || 1
+          page: response.data?.meta?.page || response.data?.page || 1,
+          pageSize: response.data?.meta?.limit || response.data?.limit || pageSize,
+          total: response.data?.meta?.total || response.data?.total || 0,
+          totalPages: response.data?.meta?.totalPages || response.data?.totalPages || 1
         }
       };
     },
@@ -137,8 +138,18 @@ const Users = () => {
   const loading = pagination.loading;
   const error = pagination.error;
   const refreshUsers = pagination.refresh;
-  const totalUsers = pagination.pagination.totalItems || 0;
+  const totalUsers = pagination.pagination.total || 0;
   const totalPages = pagination.pagination.totalPages || 1;
+
+  // Debug logs for pagination data
+  console.log('Pagination debug:', {
+    totalUsers,
+    totalPages,
+    paginationData: pagination.pagination,
+    usersLength: users.length,
+    loading,
+    error
+  });
   
   // User stats (separate cache)
   const [userStats, setUserStats] = useState<UserStats | null>(null);
@@ -151,6 +162,21 @@ const Users = () => {
     clearErrors: clearSuspensionErrors
   } = useFormValidation(userSuspensionSchema);
   const { toast } = useToast();
+
+  // Auto-refresh when filters change with debounce
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      console.log('Filters changed, refreshing data:', {
+        searchTerm,
+        statusFilter,
+        verifiedFilter,
+        dateRange
+      });
+      pagination.refresh();
+    }, 500); // 500ms debounce for search
+
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm, statusFilter, verifiedFilter, dateRange]);
 
   // Handle pagination changes
   const handlePageChange = (page: number) => {
@@ -1023,16 +1049,16 @@ const Users = () => {
           )}
 
           {/* Pagination */}
-          {totalPages > 1 && (
+          {totalUsers > 0 && (
             <div className="flex items-center justify-between mt-6">
               <EnhancedPagination
                  pagination={{
-                   currentPage: pagination.pagination.currentPage,
-                   pageSize: pagination.pagination.pageSize,
+                   currentPage: pagination.currentPage,
+                   pageSize: pagination.pageSize,
                    totalItems: totalUsers,
                    totalPages: totalPages,
-                   hasNextPage: pagination.pagination.hasNextPage,
-      hasPreviousPage: pagination.pagination.hasPreviousPage
+                   hasNextPage: pagination.hasNextPage,
+                   hasPreviousPage: pagination.hasPreviousPage
                  }}
                  onPageChange={handlePageChange}
                  onPageSizeChange={handlePageSizeChange}

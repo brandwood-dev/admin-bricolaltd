@@ -78,6 +78,249 @@ import { Stepper } from "@/components/ui/stepper";
 import { bookingsService, BookingActionData } from "@/services/bookingsService";
 import { Booking, BookingFilterParams, BookingStats, PaginatedResponse, BookingStatus } from "@/types/unified-bridge";
 
+// Composant BookingDetailsModal
+const BookingDetailsModal = ({ booking, getStatusBadge, generateBookingSteps }: { 
+  booking: any; 
+  getStatusBadge: (status: string) => JSX.Element;
+  generateBookingSteps: (booking: any) => any[];
+}) => (
+  <Dialog>
+    <DialogTrigger asChild>
+      <Button variant="ghost" size="sm">
+        <Eye className="h-4 w-4" />
+      </Button>
+    </DialogTrigger>
+    <DialogContent className="max-w-[95vw] sm:max-w-5xl max-h-[90vh] overflow-y-auto">
+      <DialogHeader>
+        <DialogTitle className="text-lg sm:text-xl">Réservation {booking.id}</DialogTitle>
+        <DialogDescription>
+          Détails complets de la réservation et informations des parties
+        </DialogDescription>
+      </DialogHeader>
+      
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-6">
+        {/* Informations principales */}
+        <div className="lg:col-span-2 space-y-6">
+          {/* Outil loué */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Package className="h-5 w-5" />
+                Outil loué
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="flex gap-4">
+                <img 
+                  src={booking.tool?.image || '/placeholder.jpg'} 
+                  alt={booking.tool?.title || 'Outil'}
+                  className="w-24 h-24 object-cover rounded-lg"
+                />
+                <div className="flex-1">
+                  <h3 className="font-semibold text-lg">{booking.tool?.title || 'Titre non disponible'}</h3>
+                  <div className="flex items-center gap-2 text-gray-600 mt-2">
+                    <User className="h-4 w-4" />
+                    <span>Propriétaire: {booking.tool?.owner || 'Non spécifié'}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-gray-600 mt-1">
+                    <Phone className="h-4 w-4" />
+                    <span>{booking.tool?.ownerPhone || 'Non spécifié'}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-gray-600 mt-1">
+                    <MapPin className="h-4 w-4" />
+                    <span>{booking.location || 'Non spécifié'}</span>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Détails de la réservation */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Calendar className="h-5 w-5" />
+                Détails de la réservation
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label className="text-sm font-medium text-gray-600">Date de début</Label>
+                  <p className="font-semibold">{booking.dates?.start || 'Non spécifié'}</p>
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-600">Date de fin</Label>
+                  <p className="font-semibold">{booking.dates?.end || 'Non spécifié'}</p>
+                </div>
+              </div>
+              <div>
+                <Label className="text-sm font-medium text-gray-600">Durée totale</Label>
+                <p className="font-semibold">{booking.dates?.duration || 0} jour(s)</p>
+              </div>
+              <div>
+                <Label className="text-sm font-medium text-gray-600">Statut actuel</Label>
+                <div className="mt-1">{getStatusBadge(booking.status)}</div>
+              </div>
+              {booking.notes && (
+                <div>
+                  <Label className="text-sm font-medium text-gray-600">Notes</Label>
+                  <p className="text-gray-700 mt-1">{booking.notes}</p>
+                </div>
+              )}
+              {booking.cancellationReason && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <Label className="text-sm font-medium text-red-800">Motif d'annulation</Label>
+                  <p className="text-red-700 mt-1">{booking.cancellationReason}</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Informations financières */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Euro className="h-5 w-5" />
+                Informations financières
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="flex justify-between">
+                <span className="text-gray-600">Tarif journalier:</span>
+                <span className="font-semibold">{booking.payment?.dailyRate || 0}€</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Durée:</span>
+                <span>{booking.dates?.duration || 0} jour(s)</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Sous-total:</span>
+                <span className="font-semibold">{booking.payment?.totalAmount || 0}€</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-gray-600">Caution:</span>
+                <span className="font-semibold">{booking.payment?.deposit || 0}€</span>
+              </div>
+              <div className="border-t pt-2">
+                <div className="flex justify-between">
+                  <span className="font-semibold">Total facturé:</span>
+                  <span className="font-bold text-lg">
+                    {(booking.payment?.totalAmount || 0) + (booking.payment?.deposit || 0)}€
+                  </span>
+                </div>
+              </div>
+              <div className="text-sm text-gray-600">
+                Méthode de paiement: {booking.payment?.method || 'Non spécifié'}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Sidebar - Informations des parties */}
+        <div className="space-y-6">
+          {/* Locataire */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <User className="h-5 w-5" />
+                Locataire
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div>
+                <Label className="text-sm font-medium text-gray-600">Nom</Label>
+                <p className="font-semibold">{booking.renter?.name || 'Non spécifié'}</p>
+              </div>
+              <div>
+                <Label className="text-sm font-medium text-gray-600">Email</Label>
+                <p className="text-sm text-blue-600">{booking.renter?.email || 'Non spécifié'}</p>
+              </div>
+              <div>
+                <Label className="text-sm font-medium text-gray-600">Téléphone</Label>
+                <p className="text-sm">{booking.renter?.phone || 'Non spécifié'}</p>
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Button variant="outline" size="sm" className="flex-1">
+                  <MessageSquare className="h-4 w-4 mr-1" />
+                  Contacter
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Suivi chronologique */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Clock className="h-5 w-5" />
+                Suivi chronologique
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Stepper steps={generateBookingSteps(booking)} />
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </DialogContent>
+  </Dialog>
+);
+
+// Composant CancelDialog
+const CancelDialog = ({ booking, onCancel }: { booking: any; onCancel: (id: string, reason: string) => void }) => {
+  const [reason, setReason] = useState('');
+  const [open, setOpen] = useState(false);
+
+  const handleCancel = () => {
+    if (reason.trim()) {
+      onCancel(booking.id, reason);
+      setReason('');
+      setOpen(false);
+    }
+  };
+
+  return (
+    <AlertDialog open={open} onOpenChange={setOpen}>
+      <AlertDialogTrigger asChild>
+        <Button variant="outline" size="sm" className="text-red-600 hover:text-red-700">
+          <X className="h-4 w-4" />
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Annuler la réservation</AlertDialogTitle>
+          <AlertDialogDescription>
+            Êtes-vous sûr de vouloir annuler cette réservation ? Cette action est irréversible.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <div className="space-y-4">
+          <div>
+            <Label htmlFor="reason">Motif d'annulation *</Label>
+            <Textarea
+              id="reason"
+              placeholder="Veuillez préciser le motif de l'annulation..."
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              className="mt-1"
+            />
+          </div>
+        </div>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Annuler</AlertDialogCancel>
+          <AlertDialogAction
+            onClick={handleCancel}
+            disabled={!reason.trim()}
+            className="bg-red-600 hover:bg-red-700"
+          >
+            Confirmer l'annulation
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+};
+
 const Bookings = () => {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [bookingStats, setBookingStats] = useState<BookingStats | null>(null);
@@ -109,12 +352,20 @@ const Bookings = () => {
         endDate: dateRange?.to?.toISOString(),
       };
 
-      const response = await bookingsService.getBookings(filters);
+      const response = await bookingsService.getAdminBookings(filters);
+      console.log('------------------------->', response)
       if (response.success && response.data) {
-        setBookings(response.data.data);
-        setTotalPages(response.data.meta.totalPages);
-        setTotalBookings(response.data.meta.total);
+        // L'API retourne un objet avec data et message, donc on accède à response.data.data
+        const bookingsData = response.data.data || [];
+        const total = response.data.total || 0;
+        setBookings(bookingsData);
+        setTotalPages(Math.ceil(total / itemsPerPage));
+        setTotalBookings(total);
       } else {
+        // Set default values when response is not successful
+        setBookings([]);
+        setTotalPages(1);
+        setTotalBookings(0);
         toast({
           title: "Erreur",
           description: "Impossible de charger les réservations",
@@ -123,6 +374,10 @@ const Bookings = () => {
       }
     } catch (error) {
       console.error('Error loading bookings:', error);
+      // Set default values on error
+      setBookings([]);
+      setTotalPages(1);
+      setTotalBookings(0);
       toast({
         title: "Erreur",
         description: "Erreur lors du chargement des réservations",
@@ -138,10 +393,16 @@ const Bookings = () => {
     try {
       const response = await bookingsService.getBookingStats();
       if (response.success && response.data) {
-        setBookingStats(response.data);
+        // L'API retourne un objet avec data et message, donc on accède à response.data.data
+        setBookingStats(response.data.data || response.data);
+      } else {
+        // Set null when response is not successful
+        setBookingStats(null);
       }
     } catch (error) {
       console.error('Error loading booking stats:', error);
+      // Set null on error
+      setBookingStats(null);
     }
   };
 
@@ -359,130 +620,7 @@ const Bookings = () => {
     loadBookingStats();
   }, [currentPage, statusFilter, searchTerm, dateRange]);
 
-  // Mock data fallback for development
-  const mockBookings = [
-    {
-      id: "RES-001",
-      tool: {
-        title: "Perceuse électrique Bosch",
-        image: "https://images.unsplash.com/photo-1572981779307-38b8cabb2407?w=400",
-        owner: "Marie Dubois",
-        ownerPhone: "+33 6 12 34 56 78"
-      },
-      renter: {
-        name: "Pierre Durand",
-        email: "pierre.durand@email.com",
-        phone: "+33 6 98 76 54 32"
-      },
-      dates: {
-        start: "2024-03-20",
-        end: "2024-03-22",
-        duration: 3
-      },
-      location: "Paris 15e",
-      status: "confirmed",
-      payment: {
-        dailyRate: 15,
-        totalAmount: 45,
-        deposit: 50,
-        method: "Carte bancaire"
-      },
-      createdAt: "2024-03-15",
-      messages: 3,
-      notes: "Location pour travaux de rénovation"
-    },
-    {
-      id: "RES-002",
-      tool: {
-        title: "Tondeuse thermique Honda",
-        image: "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400",
-        owner: "Jean Martin",
-        ownerPhone: "+33 6 87 65 43 21"
-      },
-      renter: {
-        name: "Sophie Leroy",
-        email: "sophie.leroy@email.com",
-        phone: "+33 6 55 44 33 22"
-      },
-      dates: {
-        start: "2024-03-18",
-        end: "2024-03-19",
-        duration: 2
-      },
-      location: "Lyon 3e",
-      status: "pending",
-      payment: {
-        dailyRate: 25,
-        totalAmount: 50,
-        deposit: 100,
-        method: "PayPal"
-      },
-      createdAt: "2024-03-16",
-      messages: 1,
-      notes: ""
-    },
-    {
-      id: "RES-003",
-      tool: {
-        title: "Scie circulaire Makita",
-        image: "https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=400",
-        owner: "Thomas Blanc",
-        ownerPhone: "+33 6 11 22 33 44"
-      },
-      renter: {
-        name: "Julie Moreau",
-        email: "julie.moreau@email.com",
-        phone: "+33 6 77 88 99 00"
-      },
-      dates: {
-        start: "2024-03-10",
-        end: "2024-03-12",
-        duration: 3
-      },
-      location: "Marseille 2e",
-      status: "completed",
-      payment: {
-        dailyRate: 20,
-        totalAmount: 60,
-        deposit: 75,
-        method: "Virement"
-      },
-      createdAt: "2024-03-08",
-      messages: 5,
-      notes: "Location terminée avec satisfaction"
-    },
-    {
-      id: "RES-004",
-      tool: {
-        title: "Débroussailleuse Stihl",
-        image: "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=400",
-        owner: "Claire Dubois",
-        ownerPhone: "+33 6 33 44 55 66"
-      },
-      renter: {
-        name: "Marc Petit",
-        email: "marc.petit@email.com",
-        phone: "+33 6 22 33 44 55"
-      },
-      dates: {
-        start: "2024-03-25",
-        end: "2024-03-27",
-        duration: 3
-      },
-      location: "Toulouse 1er",
-      status: "cancelled",
-      payment: {
-        dailyRate: 18,
-        totalAmount: 54,
-        deposit: 80,
-        method: "Carte bancaire"
-      },
-      createdAt: "2024-03-14",
-      messages: 2,
-      notes: "Annulée par le locataire - météo défavorable",
-      cancellationReason: "Conditions météorologiques défavorables"
-    }
-  ];
+
 
   const getStatusBadge = (status: BookingStatus) => {
     switch (status) {
@@ -586,7 +724,7 @@ const Bookings = () => {
             id: "active",
             label: "En cours",
             status: booking.status === BookingStatus.APPROVED ? "current" as const : "completed" as const,
-            date: booking.dates.start,
+            date: booking.dates?.start,
             description: "Location en cours"
           });
         }
@@ -597,7 +735,7 @@ const Bookings = () => {
             id: "completed",
             label: "Terminée",
             status: "completed" as const,
-            date: booking.dates.end,
+            date: booking.dates?.end,
             description: "Location terminée avec succès"
           });
         }
@@ -614,231 +752,11 @@ const Bookings = () => {
     return steps;
   };
 
-  const BookingDetailsModal = ({ booking }: { booking: any }) => (
-    <Dialog>
-      <DialogTrigger asChild>
-        <Button variant="ghost" size="sm">
-          <Eye className="h-4 w-4" />
-        </Button>
-      </DialogTrigger>
-        <DialogContent className="max-w-[95vw] sm:max-w-5xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-lg sm:text-xl">Réservation {booking.id}</DialogTitle>
-            <DialogDescription>
-              Détails complets de la réservation et informations des parties
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4 sm:gap-6">
-          {/* Informations principales */}
-          <div className="lg:col-span-2 space-y-6">
-            {/* Outil loué */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Package className="h-5 w-5" />
-                  Outil loué
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex gap-4">
-                  <img 
-                    src={booking.tool.image} 
-                    alt={booking.tool.title}
-                    className="w-24 h-24 object-cover rounded-lg"
-                  />
-                  <div className="flex-1">
-                    <h3 className="font-semibold text-lg">{booking.tool.title}</h3>
-                    <div className="flex items-center gap-2 text-gray-600 mt-2">
-                      <User className="h-4 w-4" />
-                      <span>Propriétaire: {booking.tool.owner}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-gray-600 mt-1">
-                      <Phone className="h-4 w-4" />
-                      <span>{booking.tool.ownerPhone}</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-gray-600 mt-1">
-                      <MapPin className="h-4 w-4" />
-                      <span>{booking.location}</span>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
 
-            {/* Détails de la réservation */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Calendar className="h-5 w-5" />
-                  Détails de la réservation
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-sm font-medium text-gray-600">Date de début</Label>
-                    <p className="font-semibold">{booking.dates.start}</p>
-                  </div>
-                  <div>
-                    <Label className="text-sm font-medium text-gray-600">Date de fin</Label>
-                    <p className="font-semibold">{booking.dates.end}</p>
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-gray-600">Durée totale</Label>
-                  <p className="font-semibold">{booking.dates.duration} jour(s)</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-gray-600">Statut actuel</Label>
-                  <div className="mt-1">{getStatusBadge(booking.status)}</div>
-                </div>
-                {booking.notes && (
-                  <div>
-                    <Label className="text-sm font-medium text-gray-600">Notes</Label>
-                    <p className="text-gray-700 mt-1">{booking.notes}</p>
-                  </div>
-                )}
-                {booking.cancellationReason && (
-                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                    <Label className="text-sm font-medium text-red-800">Motif d'annulation</Label>
-                    <p className="text-red-700 mt-1">{booking.cancellationReason}</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Informations financières */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Euro className="h-5 w-5" />
-                  Informations financières
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Tarif journalier:</span>
-                  <span className="font-semibold">{booking.payment.dailyRate}€</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Durée:</span>
-                  <span>{booking.dates.duration} jour(s)</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Sous-total:</span>
-                  <span className="font-semibold">{booking.payment.totalAmount}€</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-600">Caution:</span>
-                  <span className="font-semibold">{booking.payment.deposit}€</span>
-                </div>
-                <div className="border-t pt-2">
-                  <div className="flex justify-between">
-                    <span className="font-semibold">Total facturé:</span>
-                    <span className="font-bold text-lg">
-                      {booking.payment.totalAmount + booking.payment.deposit}€
-                    </span>
-                  </div>
-                </div>
-                <div className="text-sm text-gray-600">
-                  Méthode de paiement: {booking.payment.method}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Sidebar - Informations des parties */}
-          <div className="space-y-6">
-            {/* Locataire */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <User className="h-5 w-5" />
-                  Locataire
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div>
-                  <Label className="text-sm font-medium text-gray-600">Nom</Label>
-                  <p className="font-semibold">{booking.renter.name}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-gray-600">Email</Label>
-                  <p className="text-sm text-blue-600">{booking.renter.email}</p>
-                </div>
-                <div>
-                  <Label className="text-sm font-medium text-gray-600">Téléphone</Label>
-                  <p className="text-sm">{booking.renter.phone}</p>
-                </div>
-                <div className="flex gap-2 pt-2">
-                  <Button variant="outline" size="sm" className="flex-1">
-                    <MessageSquare className="h-4 w-4 mr-1" />
-                    Contacter
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Suivi chronologique */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <Clock className="h-5 w-5" />
-                  Suivi chronologique
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <Stepper steps={generateBookingSteps(booking)} />
-              </CardContent>
-            </Card>
-
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  );
-
-  const CancelDialog = ({ bookingId, onCancel, reason, setReason }: any) => (
-    <AlertDialog>
-      <AlertDialogTrigger asChild>
-        <Button variant="destructive" className="w-full">
-          <X className="h-4 w-4 mr-2" />
-          Annuler
-        </Button>
-      </AlertDialogTrigger>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Annuler cette réservation</AlertDialogTitle>
-          <AlertDialogDescription>
-            Veuillez spécifier le motif de l'annulation. Les deux parties seront notifiées.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <div className="space-y-2">
-          <Label htmlFor="cancellation-reason">Motif de l'annulation</Label>
-          <Textarea
-            id="cancellation-reason"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="Expliquez pourquoi cette réservation est annulée..."
-            rows={3}
-          />
-        </div>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Annuler</AlertDialogCancel>
-          <AlertDialogAction
-            onClick={() => onCancel(bookingId, reason)}
-            className="bg-destructive hover:bg-destructive/90"
-          >
-            Confirmer l'annulation
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
 
   // Statistiques calculées (fallback to mock data if no real data)
-  const displayBookings = bookings.length > 0 ? bookings : mockBookings;
+  const safeBookings = bookings || [];
+  const displayBookings = safeBookings;
   const displayStats = bookingStats || {
     total: displayBookings.length,
     confirmed: displayBookings.filter(b => b.status === "confirmed").length,
@@ -850,21 +768,10 @@ const Bookings = () => {
       displayBookings.reduce((sum, b) => sum + (b.payment?.totalAmount || 0), 0) / displayBookings.length : 0
   };
 
-  // For mock data, apply client-side filtering
-  const filteredBookings = bookings.length > 0 ? displayBookings : displayBookings.filter(booking => {
-    const matchesSearch = booking.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         booking.tool.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         booking.renter.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesStatus = statusFilter === "all" || booking.status === statusFilter;
-    const matchesDate = !dateRange?.from || !dateRange?.to || 
-                       (new Date(booking.dates.start) >= dateRange.from && new Date(booking.dates.end) <= dateRange.to);
-    return matchesSearch && matchesStatus && matchesDate;
-  });
-
-  // Pagination (for mock data)
-  const displayTotalPages = bookings.length > 0 ? totalPages : Math.ceil(filteredBookings.length / itemsPerPage);
+  // Les données sont déjà filtrées et paginées par le serveur
+  const paginatedBookings = displayBookings;
+  const displayTotalPages = totalPages;
   const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedBookings = bookings.length > 0 ? displayBookings : filteredBookings.slice(startIndex, startIndex + itemsPerPage);
 
   return (
     <div className="space-y-6">
@@ -1114,7 +1021,7 @@ const Bookings = () => {
       {/* Bookings Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Réservations ({bookings.length > 0 ? totalBookings : filteredBookings.length})</CardTitle>
+          <CardTitle>Réservations ({totalBookings})</CardTitle>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -1182,35 +1089,50 @@ const Bookings = () => {
                 </div>
               )}
 
-              <div className="overflow-x-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-12">
-                        <input
-                          type="checkbox"
-                          checked={bulkSelectedBookings.length === paginatedBookings.length && paginatedBookings.length > 0}
-                          className="rounded border-gray-300"
-                          onChange={(e) => {
-                            if (e.target.checked) {
-                              setBulkSelectedBookings(paginatedBookings.map(b => b.id));
-                            } else {
-                              setBulkSelectedBookings([]);
-                            }
-                          }}
-                        />
-                      </TableHead>
-                      <TableHead>Réservation</TableHead>
-                      <TableHead className="hidden md:table-cell">Locataire</TableHead>
-                      <TableHead className="hidden lg:table-cell">Dates</TableHead>
-                      <TableHead>Montant</TableHead>
-                      <TableHead>Statut</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {paginatedBookings.map((booking) => (
-                      <TableRow key={booking.id}>
+              {paginatedBookings.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12 text-center">
+                  <div className="text-gray-400 mb-4">
+                    <svg className="w-16 h-16 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                    </svg>
+                  </div>
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">Aucune réservation trouvée</h3>
+                  <p className="text-gray-500 mb-4">Il n'y a actuellement aucune réservation correspondant à vos critères.</p>
+                  <Button onClick={loadBookings} variant="outline">
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Actualiser
+                  </Button>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead className="w-12">
+                          <input
+                            type="checkbox"
+                            checked={bulkSelectedBookings.length === paginatedBookings.length && paginatedBookings.length > 0}
+                            className="rounded border-gray-300"
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setBulkSelectedBookings(paginatedBookings.map(b => b.id));
+                              } else {
+                                setBulkSelectedBookings([]);
+                              }
+                            }}
+                          />
+                        </TableHead>
+                        <TableHead>Réservation</TableHead>
+                        <TableHead className="hidden md:table-cell">Locataire</TableHead>
+                        <TableHead className="hidden lg:table-cell">Dates</TableHead>
+                        <TableHead>Montant</TableHead>
+                        <TableHead>Statut</TableHead>
+                        <TableHead>Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {paginatedBookings.map((booking) => (
+                        <TableRow key={booking.id}>
                         <TableCell>
                           <input
                             type="checkbox"
@@ -1251,21 +1173,25 @@ const Bookings = () => {
                         </TableCell>
                         <TableCell className="hidden lg:table-cell">
                           <div className="text-sm">
-                            <div>{booking.dates.start}</div>
-                            <div className="text-gray-500">au {booking.dates.end}</div>
-                            <div className="text-xs text-gray-400">({booking.dates.duration}j)</div>
+                            <div>{booking.dates?.start || 'Non spécifié'}</div>
+                      <div className="text-gray-500">au {booking.dates?.end || 'Non spécifié'}</div>
+                      <div className="text-xs text-gray-400">({booking.dates?.duration || 0}j)</div>
                           </div>
                         </TableCell>
                         <TableCell>
                           <div className="text-sm">
-                            <div className="font-medium">{booking.payment.totalAmount}€</div>
-                            <div className="text-gray-500 text-xs">+ {booking.payment.deposit}€ caution</div>
+                            <div className="font-medium">{booking.payment?.totalAmount || 0}€</div>
+                            <div className="text-gray-500 text-xs">+ {booking.payment?.deposit || 0}€ caution</div>
                           </div>
                         </TableCell>
                         <TableCell>{getStatusBadge(booking.status)}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">
-                            <BookingDetailsModal booking={booking} />
+                            <BookingDetailsModal 
+                              booking={booking} 
+                              getStatusBadge={getStatusBadge}
+                              generateBookingSteps={generateBookingSteps}
+                            />
                             {booking.status === BookingStatus.PENDING && (
                               <Button 
                                 variant="ghost" 
@@ -1279,16 +1205,17 @@ const Bookings = () => {
                         </TableCell>
                       </TableRow>
                     ))}
-                  </TableBody>
-                </Table>
-              </div>
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
             </>
           )}
 
           {/* Pagination */}
           <div className="flex items-center justify-between mt-6">
             <div className="text-sm text-gray-500">
-              Affichage de {startIndex + 1} à {Math.min(startIndex + itemsPerPage, bookings.length > 0 ? totalBookings : filteredBookings.length)} sur {bookings.length > 0 ? totalBookings : filteredBookings.length} réservations
+              Affichage de {startIndex + 1} à {Math.min(startIndex + itemsPerPage, totalBookings)} sur {totalBookings} réservations
             </div>
             <div className="flex items-center gap-2">
               <Button

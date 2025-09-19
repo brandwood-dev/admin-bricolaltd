@@ -81,13 +81,67 @@ class SettingsService {
     security: SecuritySettings;
     notification: NotificationSettings;
   }>> {
-    return await apiClient.get<{
-      platform: PlatformSettings;
-      payment: PaymentSettings;
-      email: EmailSettings;
-      security: SecuritySettings;
-      notification: NotificationSettings;
-    }>('/admin/settings');
+    try {
+      const response = await apiClient.get<Setting[]>('/admin/settings');
+      
+      if (!response.success || !response.data) {
+        throw new Error('Invalid response structure');
+      }
+      
+      const settings = response.data;
+      
+      // Group settings by category and transform to expected structure
+      const groupedSettings = {
+        platform: {} as PlatformSettings,
+        payment: {} as PaymentSettings,
+        email: {} as EmailSettings,
+        security: {} as SecuritySettings,
+        notification: {} as NotificationSettings
+      };
+      
+      settings.forEach((setting: Setting) => {
+        const category = setting.category as keyof typeof groupedSettings;
+        if (groupedSettings[category]) {
+          // Convert string values to appropriate types
+          let value: any = setting.value;
+          
+          // Handle boolean values
+          if (value === 'true') value = true;
+          else if (value === 'false') value = false;
+          // Handle numeric values
+          else if (!isNaN(Number(value)) && value !== '') value = Number(value);
+          // Handle arrays (for ipWhitelist)
+          else if (setting.key === 'ipWhitelist' && typeof value === 'string') {
+            try {
+              value = JSON.parse(value);
+            } catch {
+              value = value.split(',').map(ip => ip.trim()).filter(ip => ip);
+            }
+          }
+          
+          (groupedSettings[category] as any)[setting.key] = value;
+        }
+      });
+      
+      return {
+        success: true,
+        data: groupedSettings,
+        message: response.message || 'Settings retrieved successfully'
+      };
+    } catch (error) {
+      console.error('Error in getAllSettings:', error);
+      return {
+        success: false,
+        data: {
+          platform: {} as PlatformSettings,
+          payment: {} as PaymentSettings,
+          email: {} as EmailSettings,
+          security: {} as SecuritySettings,
+          notification: {} as NotificationSettings
+        },
+        message: 'Failed to retrieve settings'
+      };
+    }
   }
 
   // Get settings by category

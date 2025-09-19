@@ -36,6 +36,11 @@ class BookingsService {
     return await apiClient.get<PaginatedResponse<Booking>>('/bookings', { params });
   }
 
+  // Admin-specific bookings with pagination
+  async getAdminBookings(params?: BookingFilterParams): Promise<ApiResponse<PaginatedResponse<Booking>>> {
+    return await apiClient.get<PaginatedResponse<Booking>>('/bookings/admin', { params });
+  }
+
   async getBookingById(id: string): Promise<ApiResponse<Booking>> {
     return await apiClient.get<Booking>(`/bookings/${id}`);
   }
@@ -84,11 +89,11 @@ class BookingsService {
 
   // Analytics and Stats
   async getBookingStats(): Promise<ApiResponse<BookingStats>> {
-    return await apiClient.get<BookingStats>('/admin/bookings/stats');
+    return await apiClient.get<BookingStats>('/bookings/admin/stats');
   }
 
   async getBookingAnalytics(period: 'week' | 'month' | 'year'): Promise<ApiResponse<{ date: string; bookings: number; revenue: number }[]>> {
-    return await apiClient.get<{ date: string; bookings: number; revenue: number }[]>(`/admin/bookings/analytics?period=${period}`);
+    return await apiClient.get<{ date: string; bookings: number; revenue: number }[]>(`/bookings/admin/analytics?period=${period}`);
   }
 
   // Export functionality

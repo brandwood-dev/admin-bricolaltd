@@ -28,24 +28,34 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   // Initialize auth state on mount
   useEffect(() => {
     const initializeAuth = async () => {
+      console.log('🔐 [AuthContext] Initializing auth...');
       try {
         const token = authService.getToken();
         const currentUser = authService.getCurrentUser();
+        console.log('🔐 [AuthContext] Token exists:', !!token);
+        console.log('🔐 [AuthContext] Current user from storage:', currentUser);
         
         if (token && currentUser) {
+          console.log('🔐 [AuthContext] Verifying token with server...');
           // Verify token is still valid by fetching profile
           const response = await authService.getProfile();
+          console.log('🔐 [AuthContext] Profile response:', response);
           if (response.success && response.data) {
+            console.log('🔐 [AuthContext] Setting user:', response.data);
             setUser(response.data);
           } else {
+            console.log('🔐 [AuthContext] Token invalid, logging out');
             // Token is invalid, clear auth data
             await logout();
           }
+        } else {
+          console.log('🔐 [AuthContext] No token or user found');
         }
       } catch (error) {
-        console.error('Auth initialization error:', error);
+        console.error('🔐 [AuthContext] Auth initialization error:', error);
         await logout();
       } finally {
+        console.log('🔐 [AuthContext] Auth initialization complete');
         setIsLoading(false);
       }
     };
@@ -153,6 +163,14 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const hasRole = (role: string): boolean => {
     return authService.hasRole(role);
   };
+
+  // Debug logs for auth state changes
+  useEffect(() => {
+    console.log('🔐 [AuthContext] Auth state changed:');
+    console.log('  - user:', user);
+    console.log('  - isAuthenticated:', !!user);
+    console.log('  - isLoading:', isLoading);
+  }, [user, isLoading]);
 
   const value: AuthContextType = {
     user,

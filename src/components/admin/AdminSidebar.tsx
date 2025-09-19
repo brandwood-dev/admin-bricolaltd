@@ -13,7 +13,8 @@ import {
   BarChart3,
   Settings,
   Shield,
-  Wallet
+  Wallet,
+  Star
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -67,6 +68,12 @@ const AdminSidebar = ({ onItemClick }: AdminSidebarProps) => {
       icon: FileText,
       href: "/admin/blog",
       permission: "manage_content"
+    },
+    {
+      title: "Reviews",
+      icon: Star,
+      href: "/admin/reviews",
+      permission: "manage_reviews"
     }
   ];
 

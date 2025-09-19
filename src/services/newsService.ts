@@ -26,7 +26,7 @@ export interface News {
     lastName: string;
     email: string;
   };
-  categoryId?: string;
+  category?: string;
   adminId?: string;
   createdAt: string;
   updatedAt: string;
@@ -40,7 +40,7 @@ export interface CreateNewsDto {
   isPublic?: boolean;
   isFeatured?: boolean;
   summary?: string;
-  categoryId?: string;
+  category?: string;
   // Note: 'files' field is handled separately via FormData, not included in this DTO
 }
 
@@ -52,7 +52,7 @@ export interface UpdateNewsDto {
   isPublic?: boolean;
   isFeatured?: boolean;
   summary?: string;
-  categoryId?: string;
+  category?: string;
   replaceMainImage?: boolean;
 }
 
@@ -64,6 +64,7 @@ export interface NewsFilterParams {
   isFeatured?: boolean;
   startDate?: string;
   endDate?: string;
+  category?: string;
 }
 
 class NewsService {
@@ -76,7 +77,7 @@ class NewsService {
     if (params?.search) queryParams.append('search', params.search);
     if (params?.isPublic !== undefined) queryParams.append('isPublic', params.isPublic.toString());
     if (params?.isFeatured !== undefined) queryParams.append('isFeatured', params.isFeatured.toString());
-    if (params?.categoryId) queryParams.append('categoryId', params.categoryId);
+    if (params?.category) queryParams.append('category', params.category);
     if (params?.startDate) queryParams.append('startDate', params.startDate);
     if (params?.endDate) queryParams.append('endDate', params.endDate);
 
@@ -117,7 +118,7 @@ class NewsService {
     if (data.isPublic !== undefined) formData.append('isPublic', data.isPublic.toString());
     if (data.isFeatured !== undefined) formData.append('isFeatured', data.isFeatured.toString());
     if (data.summary) formData.append('summary', data.summary);
-    if (data.categoryId) formData.append('categoryId', data.categoryId);
+    if (data.category) formData.append('category', data.category);
     if (data.additionalImages) {
       data.additionalImages.forEach((url, index) => {
         formData.append(`additionalImages[${index}]`, url);
@@ -144,7 +145,7 @@ class NewsService {
         isPublic: data.isPublic,
         isFeatured: data.isFeatured,
         summary: data.summary,
-        categoryId: data.categoryId
+        category: data.category
       },
       filesCount: files?.length || 0
     });
@@ -167,7 +168,7 @@ class NewsService {
     if (data.isPublic !== undefined) formData.append('isPublic', data.isPublic.toString());
     if (data.isFeatured !== undefined) formData.append('isFeatured', data.isFeatured.toString());
     if (data.summary) formData.append('summary', data.summary);
-    if (data.categoryId) formData.append('categoryId', data.categoryId);
+    if (data.category) formData.append('category', data.category);
     if (data.replaceMainImage !== undefined) formData.append('replaceMainImage', data.replaceMainImage.toString());
     if (data.additionalImages) {
       data.additionalImages.forEach((url, index) => {
@@ -203,7 +204,7 @@ class NewsService {
         isPublic: data.isPublic,
         isFeatured: data.isFeatured,
         summary: data.summary,
-        categoryId: data.categoryId,
+        category: data.category,
         replaceMainImage: data.replaceMainImage
       },
       filesCount: files?.length || 0

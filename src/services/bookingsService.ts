@@ -38,7 +38,19 @@ class BookingsService {
 
   // Admin-specific bookings with pagination
   async getAdminBookings(params?: BookingFilterParams): Promise<ApiResponse<PaginatedResponse<Booking>>> {
-    return await apiClient.get<PaginatedResponse<Booking>>('/bookings/admin', { params });
+    const queryParams = new URLSearchParams();
+    
+    if (params?.page) queryParams.append('page', params.page.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.search) queryParams.append('search', params.search);
+    if (params?.startDate) queryParams.append('startDate', params.startDate);
+    if (params?.endDate) queryParams.append('endDate', params.endDate);
+    if (params?.sortBy) queryParams.append('sortBy', params.sortBy);
+    if (params?.sortOrder) queryParams.append('sortOrder', params.sortOrder);
+    
+    const url = `/admin/bookings${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+    return apiClient.get<PaginatedResponse<Booking>>(url);
   }
 
   async getBookingById(id: string): Promise<ApiResponse<Booking>> {
@@ -89,11 +101,11 @@ class BookingsService {
 
   // Analytics and Stats
   async getBookingStats(): Promise<ApiResponse<BookingStats>> {
-    return await apiClient.get<BookingStats>('/bookings/admin/stats');
+    return await apiClient.get<BookingStats>('/admin/bookings/stats');
   }
 
   async getBookingAnalytics(period: 'week' | 'month' | 'year'): Promise<ApiResponse<{ date: string; bookings: number; revenue: number }[]>> {
-    return await apiClient.get<{ date: string; bookings: number; revenue: number }[]>(`/bookings/admin/analytics?period=${period}`);
+    return await apiClient.get<{ date: string; bookings: number; revenue: number }[]>(`/admin/bookings/analytics?period=${period}`);
   }
 
   // Export functionality

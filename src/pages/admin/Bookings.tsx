@@ -339,12 +339,17 @@ const Bookings = () => {
   const [showFilters, setShowFilters] = useState(false);
   const { toast } = useToast();
 
-  // Load bookings data
-  const loadBookings = async () => {
+  // Load bookings data with pagination
+  const loadBookings = async (page: number = currentPage) => {
     try {
       setLoading(true);
+      
+      // Debug: Check token
+      const token = localStorage.getItem('admin_token');
+      
+      
       const filters: BookingFilterParams = {
-        page: currentPage,
+        page,
         limit: itemsPerPage,
         search: searchTerm || undefined,
         status: statusFilter !== "all" ? statusFilter as BookingStatus : undefined,
@@ -353,34 +358,37 @@ const Bookings = () => {
       };
 
       const response = await bookingsService.getAdminBookings(filters);
-      console.log('------------------------->', response)
+      console.log ('*******************************************************************')
+      console.log ('*******************************************************************')
+      console.log ('*******************************************************************')
+      console.log ('*******************************************************************', response)
+
       if (response.success && response.data) {
-        // L'API retourne un objet avec data et message, donc on accède à response.data.data
-        const bookingsData = response.data.data || [];
-        const total = response.data.total || 0;
-        setBookings(bookingsData);
-        setTotalPages(Math.ceil(total / itemsPerPage));
-        setTotalBookings(total);
+        // Handle both direct properties and meta object structure
+        const bookingsData = response.data.data.data || response.data || [];
+        // Ensure bookingsData is an array
+        const safeBookingsData = Array.isArray(bookingsData) ? bookingsData : [];
+        setBookings(safeBookingsData);
+        setTotalPages(response.data.data.totalPages || response.data.meta?.totalPages || 1);
+        setTotalBookings(response.data.data.total || response.data.meta?.total || 0);
+        setCurrentPage(page);
       } else {
-        // Set default values when response is not successful
+        // If response is not successful, set empty array
         setBookings([]);
         setTotalPages(1);
         setTotalBookings(0);
-        toast({
-          title: "Erreur",
-          description: "Impossible de charger les réservations",
-          variant: "destructive",
-        });
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error loading bookings:', error);
-      // Set default values on error
-      setBookings([]);
-      setTotalPages(1);
-      setTotalBookings(0);
+      console.error('Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        statusText: error.response?.statusText
+      });
       toast({
         title: "Erreur",
-        description: "Erreur lors du chargement des réservations",
+        description: `Impossible de charger les réservations: ${error.response?.data?.message || error.message}`,
         variant: "destructive",
       });
     } finally {
@@ -393,8 +401,8 @@ const Bookings = () => {
     try {
       const response = await bookingsService.getBookingStats();
       if (response.success && response.data) {
-        // L'API retourne un objet avec data et message, donc on accède à response.data.data
-        setBookingStats(response.data.data || response.data);
+        // L'API retourne BookingStats directement dans response.data
+        setBookingStats(response.data);
       } else {
         // Set null when response is not successful
         setBookingStats(null);
@@ -614,11 +622,23 @@ const Bookings = () => {
     }
   };
 
-  // Effects
+  // Load bookings on component mount and when filters change
   useEffect(() => {
-    loadBookings();
+    loadBookings(1); // Reset to first page when filters change
     loadBookingStats();
-  }, [currentPage, statusFilter, searchTerm, dateRange]);
+  }, [searchTerm, statusFilter, dateRange, itemsPerPage]);
+
+  // Load bookings when page changes
+  useEffect(() => {
+    if (currentPage > 1) {
+      loadBookings(currentPage);
+    }
+  }, [currentPage]);
+
+  // Reset page when filters change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter, dateRange, itemsPerPage]);
 
 
 
@@ -756,20 +776,19 @@ const Bookings = () => {
 
   // Statistiques calculées (fallback to mock data if no real data)
   const safeBookings = bookings || [];
-  const displayBookings = safeBookings;
   const displayStats = bookingStats || {
-    total: displayBookings.length,
-    confirmed: displayBookings.filter(b => b.status === "confirmed").length,
-    pending: displayBookings.filter(b => b.status === "pending").length,
-    cancelled: displayBookings.filter(b => b.status === "cancelled").length,
-    completed: displayBookings.filter(b => b.status === "completed").length,
-    totalRevenue: displayBookings.reduce((sum, b) => sum + (b.payment?.totalAmount || 0), 0),
-    averageBookingValue: displayBookings.length > 0 ? 
-      displayBookings.reduce((sum, b) => sum + (b.payment?.totalAmount || 0), 0) / displayBookings.length : 0
+    total: totalBookings, // Use totalBookings from server response
+    confirmed: safeBookings.filter(b => b.status === "confirmed").length,
+    pending: safeBookings.filter(b => b.status === "pending").length,
+    cancelled: safeBookings.filter(b => b.status === "cancelled").length,
+    completed: safeBookings.filter(b => b.status === "completed").length,
+    totalRevenue: safeBookings.reduce((sum, b) => sum + (b.payment?.totalAmount || 0), 0),
+    averageBookingValue: safeBookings.length > 0 ? 
+      safeBookings.reduce((sum, b) => sum + (b.payment?.totalAmount || 0), 0) / safeBookings.length : 0
   };
 
   // Les données sont déjà filtrées et paginées par le serveur
-  const paginatedBookings = displayBookings;
+  const paginatedBookings = safeBookings; // Use the bookings from server (already paginated)
   const displayTotalPages = totalPages;
   const startIndex = (currentPage - 1) * itemsPerPage;
 
@@ -943,7 +962,7 @@ const Bookings = () => {
               <div>
                 <p className="text-sm text-gray-600">En cours</p>
                 <p className="text-2xl font-bold text-blue-500">
-                  {displayBookings.filter(b => b.status === BookingStatus.APPROVED).length}
+                  {safeBookings.filter(b => b.status === BookingStatus.APPROVED).length}
                 </p>
               </div>
               <PlayCircle className="h-8 w-8 text-blue-500" />

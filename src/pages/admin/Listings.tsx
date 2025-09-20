@@ -761,7 +761,7 @@ const Listings = () => {
   const [categoriesError, setCategoriesError] = useState<string | null>(null);
   const [totalPages, setTotalPages] = useState(1);
   const [totalTools, setTotalTools] = useState(0);
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [categories, setCategories] = useState([]);
   const [subcategories, setSubcategories] = useState<Subcategory[]>([]);
   const [filteredSubcategories, setFilteredSubcategories] = useState<Subcategory[]>([]);
   const itemsPerPage = 10;
@@ -774,8 +774,9 @@ const Listings = () => {
     try {
       const response = await toolsService.getCategories();
       if (response.success && response.data) {
+        console.log('-------------------------------', response)
         // Extract data from response.data.data if it exists, otherwise use response.data directly
-        const categoriesData = response.data.data || response.data;
+        const categoriesData = response.data.data;
         setCategories(categoriesData);
       } else {
         // Only throw error if response indicates failure, not just missing data structure

@@ -4,7 +4,7 @@ import {
   PaginatedResponse,
   BookingFilterParams,
   BookingStats
-} from './types';
+} from '../types/unified-bridge';
 
 export interface CreateBookingData {
   toolId: string;
@@ -70,8 +70,8 @@ class BookingsService {
   }
 
   // Booking Status Management
-  async confirmBooking(id: string, data?: BookingActionData): Promise<ApiResponse<Booking>> {
-    return await apiClient.patch<Booking>(`/bookings/${id}/confirm`, data);
+  async acceptBooking(id: string, data?: BookingActionData): Promise<ApiResponse<Booking>> {
+    return await apiClient.patch<Booking>(`/bookings/${id}/accept`, data);
   }
 
   async cancelBooking(id: string, data: BookingActionData): Promise<ApiResponse<Booking>> {
@@ -82,8 +82,8 @@ class BookingsService {
     return await apiClient.patch<Booking>(`/bookings/${id}/complete`, data);
   }
 
-  async approveBooking(id: string, data?: BookingActionData): Promise<ApiResponse<Booking>> {
-    return await apiClient.patch<Booking>(`/bookings/${id}/approve`, data);
+  async startBooking(id: string, data?: BookingActionData): Promise<ApiResponse<Booking>> {
+    return await apiClient.patch<Booking>(`/bookings/${id}/start`, data);
   }
 
   async rejectBooking(id: string, data: BookingActionData): Promise<ApiResponse<Booking>> {
@@ -114,7 +114,7 @@ class BookingsService {
   }
 
   // Bulk operations
-  async bulkUpdateBookings(bookingIds: string[], action: 'confirm' | 'cancel' | 'complete', data?: BookingActionData): Promise<ApiResponse<{ success: number; failed: number; errors: string[] }>> {
+  async bulkUpdateBookings(bookingIds: string[], action: 'accept' | 'cancel' | 'complete', data?: BookingActionData): Promise<ApiResponse<{ success: number; failed: number; errors: string[] }>> {
     return await apiClient.post<{ success: number; failed: number; errors: string[] }>('/admin/bookings/bulk-action', {
       bookingIds,
       action,

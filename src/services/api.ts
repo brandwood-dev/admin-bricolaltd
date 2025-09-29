@@ -56,7 +56,7 @@ class ApiClient {
           try {
             const refreshToken = localStorage.getItem('admin_refresh_token');
             if (refreshToken) {
-              const response = await this.client.post('/admin/refresh', { refreshToken });
+              const response = await this.client.post('/auth/refresh', { refreshToken });
               const { token } = response.data;
               
               localStorage.setItem('admin_token', token);
@@ -74,12 +74,19 @@ class ApiClient {
           }
         }
         
-        // For other errors, just clear tokens and redirect
+        // For other errors, check if we're on auth page before redirecting
         if (error.response?.status === 401) {
-          localStorage.removeItem('admin_token');
-          localStorage.removeItem('admin_refresh_token');
-          localStorage.removeItem('admin_user');
-          window.location.href = '/admin/login';
+          const currentPath = window.location.pathname;
+          const isOnAuthPage = currentPath === '/admin/login' || currentPath === '/admin/register';
+          
+          // Only clear localStorage and redirect if not on auth pages
+          // This prevents page reload during login attempts with invalid credentials
+          if (!isOnAuthPage) {
+            localStorage.removeItem('admin_token');
+            localStorage.removeItem('admin_refresh_token');
+            localStorage.removeItem('admin_user');
+            window.location.href = '/admin/login';
+          }
         }
         
         return Promise.reject(error);
@@ -129,6 +136,19 @@ class ApiClient {
     });
 
     return response.data;
+  }
+
+  async downloadFile(url: string, config?: AxiosRequestConfig): Promise<ApiResponse<Blob>> {
+    const response = await this.client.get(url, {
+      ...config,
+      responseType: 'blob',
+    });
+    
+    return {
+      data: response.data,
+      success: true,
+      message: 'File downloaded successfully'
+    };
   }
 }
 

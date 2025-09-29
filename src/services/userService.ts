@@ -94,8 +94,8 @@ class UserService {
     return await apiClient.patch<User>(`/users/${id}/deactivate`, { reason });
   }
 
-  async suspendUser(id: string, reason: string, duration?: number): Promise<ApiResponse<User>> {
-    return await apiClient.patch<User>(`/users/${id}/suspend`, { reason, duration });
+  async suspendUser(id: string, reason: string): Promise<ApiResponse<User>> {
+    return await apiClient.post<User>(`/users/${id}/suspend`, { reason });
   }
 
   async banUser(id: string, reason: string, permanent?: boolean): Promise<ApiResponse<User>> {

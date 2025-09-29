@@ -181,16 +181,7 @@ export const useFormValidation = <T>(schema: z.ZodSchema<T>) => {
 
 // User suspension schema
 export const userSuspensionSchema = z.object({
-  reason: z.string().min(1, 'La raison de suspension est requise'),
-  customReason: z.string().optional().refine((val, ctx) => {
-    const reason = ctx.parent.reason;
-    if (reason === 'Autre (veuillez préciser)' && (!val || val.trim().length === 0)) {
-      return false;
-    }
-    return true;
-  }, {
-    message: 'Veuillez préciser la raison de suspension'
-  })
+  reason: z.string().min(1, 'La raison de suspension est requise')
 });
 
 export type UserFormData = z.infer<typeof userValidationSchema>;

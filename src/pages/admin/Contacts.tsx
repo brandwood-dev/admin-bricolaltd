@@ -39,7 +39,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '../../components/ui/select'
+} from '@/components/ui/select'
 import {
   Table,
   TableBody,
@@ -87,6 +87,18 @@ const Contacts: React.FC = () => {
   const { isAuthenticated, user } = useAuth()
 
   const itemsPerPage = 10
+
+  // Fonction pour formater les dates au format jj-mm-aaaa hh:mm
+  const formatDate = (dateString: string) => {
+    if (!dateString) return ''
+    const date = new Date(dateString)
+    const day = date.getDate().toString().padStart(2, '0')
+    const month = (date.getMonth() + 1).toString().padStart(2, '0')
+    const year = date.getFullYear()
+    const hours = date.getHours().toString().padStart(2, '0')
+    const minutes = date.getMinutes().toString().padStart(2, '0')
+    return `${day}-${month}-${year} ${hours}:${minutes}`
+  }
   // ENUM('technical', 'payment', 'account', 'dispute', 'suggestion', 'other'
   const categories = [
     { value: 'support', label: 'Support' },
@@ -401,7 +413,7 @@ const Contacts: React.FC = () => {
                       <Label className='text-sm font-medium text-gray-600'>
                         Date
                       </Label>
-                      <p>{contact.createdAt}</p>
+                      <p>{formatDate(contact.createdAt)}</p>
                     </div>
                   </div>
                   <div>
@@ -526,93 +538,36 @@ const Contacts: React.FC = () => {
                     Envoyer réponse
                   </Button>
 
-                  <Button variant='outline' className='w-full'>
-                    <Phone className='h-4 w-4 mr-2' />
-                    Appeler le client
-                  </Button>
-
-                  {contact.status !== 'closed' && (
-                    <Button
-                      onClick={handleCloseTicket}
-                      variant='outline'
-                      className='w-full'
-                    >
-                      <CheckCircle className='h-4 w-4 mr-2' />
-                      Marquer fermé
-                    </Button>
-                  )}
-                </CardContent>
-              </Card>
-
-              {/* Attribution */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className='text-lg'>Attribution</CardTitle>
-                </CardHeader>
-                <CardContent className='space-y-3'>
                   <div>
-                    <Label htmlFor='assign'>Assigné à</Label>
+                    <Label htmlFor='status'>Changer le statut</Label>
                     <Select
-                      value={assignedTo || 'unassigned'}
-                      onValueChange={handleAssignmentChange}
-                    >
-                      <SelectTrigger>
-                        <SelectValue>{getAssignmentLabel(assignedTo)}</SelectValue>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value='unassigned'>Non assigné</SelectItem>
-                        <SelectItem value='admin1'>Admin Support</SelectItem>
-                        <SelectItem value='admin2'>Tech Support</SelectItem>
-                        <SelectItem value='admin3'>Manager</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  <div>
-                    <Label htmlFor='priority'>Priorité</Label>
-                    <Select
-                      value={priority}
-                      onValueChange={handlePriorityUpdate}
+                      value={contact.status}
+                      onValueChange={(newStatus) => {
+                        contactService.updateContactStatus(contact.id, newStatus)
+                          .then(() => {
+                            loadContacts()
+                            toast.success('Statut mis à jour avec succès')
+                          })
+                          .catch((err) => {
+                            console.error('Erreur lors du changement de statut:', err)
+                            toast.error('Erreur lors du changement de statut')
+                          })
+                      }}
                     >
                       <SelectTrigger>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value='low'>Faible</SelectItem>
-                        <SelectItem value='medium'>Moyenne</SelectItem>
-                        <SelectItem value='high'>Élevée</SelectItem>
-                        <SelectItem value='urgent'>Urgente</SelectItem>
+                        <SelectItem value='new'>Nouveau</SelectItem>
+                        <SelectItem value='in_progress'>En cours</SelectItem>
+                        <SelectItem value='closed'>Traité</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Historique */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className='text-lg flex items-center gap-2'>
-                    <Clock className='h-5 w-5' />
-                    Historique
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className='space-y-2 text-sm'>
-                  <div className='flex justify-between'>
-                    <span className='text-gray-600'>Créé le:</span>
-                    <span>{contact.createdAt}</span>
-                  </div>
-                  {contact.assignedTo && (
-                    <div className='flex justify-between'>
-                      <span className='text-gray-600'>Assigné à:</span>
-                      <span>{getAssignmentLabel(contact.assignedTo)}</span>
-                    </div>
-                  )}
-                  <div className='flex justify-between'>
-                    <span className='text-gray-600'>Statut:</span>
-                    {getStatusBadge(contact.status)}
-                  </div>
-                </CardContent>
-              </Card>
+
             </div>
           </div>
         </DialogContent>
@@ -805,7 +760,6 @@ const Contacts: React.FC = () => {
                     <TableHead className='hidden lg:table-cell'>
                       Catégorie
                     </TableHead>
-                    <TableHead>Priorité</TableHead>
                     <TableHead>Statut</TableHead>
                     <TableHead>Actions</TableHead>
                   </TableRow>
@@ -821,7 +775,7 @@ const Contacts: React.FC = () => {
                           </div>
                           <div className='text-sm text-gray-400 flex items-center gap-1 mt-1'>
                             <Calendar className='h-3 w-3' />
-                            {contact.createdAt}
+                            {formatDate(contact.createdAt)}
                           </div>
                         </div>
                       </TableCell>
@@ -839,9 +793,6 @@ const Contacts: React.FC = () => {
                         <Badge variant='outline'>
                           {getCategoryLabel(contact.category)}
                         </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {getPriorityBadge(contact.priority)}
                       </TableCell>
                       <TableCell>{getStatusBadge(contact.status)}</TableCell>
                       <TableCell>

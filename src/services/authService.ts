@@ -44,7 +44,10 @@ export interface LoginResponse {
 export interface ChangePasswordData {
   currentPassword: string;
   newPassword: string;
-  newPasswordConfirmation: string;
+}
+
+export interface ValidatePasswordData {
+  currentPassword: string;
 }
 
 interface AuthResponse {
@@ -115,8 +118,13 @@ class AuthService {
     return response;
   }
 
+  async validateCurrentPassword(data: ValidatePasswordData): Promise<ApiResponse<{ valid: boolean }>> {
+    // Le backend attend 'password' et non 'currentPassword'
+    return apiClient.post<{ valid: boolean }>('/auth/validate-password', { password: data.currentPassword });
+  }
+
   async changePassword(data: ChangePasswordData): Promise<ApiResponse<null>> {
-    return apiClient.post<null>('/admin/change-password', data);
+    return apiClient.post<null>('/auth/change-password', data);
   }
 
   getCurrentUser(): AdminUser | null {

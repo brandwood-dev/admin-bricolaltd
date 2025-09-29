@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
 import { authService, AdminUser, LoginCredentials } from '../services/authService';
+import { apiClient } from '../services/api';
 import { useToast } from '../hooks/use-toast';
 
 interface AuthContextType {
@@ -37,13 +38,12 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
         
         if (token && currentUser) {
           console.log('🔐 [AuthContext] Verifying token with server...');
-          // Verify token is still valid by fetching profile
-          const response = await authService.getProfile();
-          console.log('🔐 [AuthContext] Profile response:', response);
-          if (response.success && response.data) {
-            console.log('🔐 [AuthContext] Setting user:', response.data);
-            setUser(response.data);
-          } else {
+          // Verify token is still valid using standard endpoint
+          try {
+            await apiClient.get('/auth/verify');
+            console.log('🔐 [AuthContext] Token valid, setting user:', currentUser);
+            setUser(currentUser);
+          } catch (error) {
             console.log('🔐 [AuthContext] Token invalid, logging out');
             // Token is invalid, clear auth data
             await logout();
@@ -63,21 +63,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     initializeAuth();
   }, []);
 
-  // Auto-refresh token before expiration
-  useEffect(() => {
-    if (!user) return;
-
-    const refreshInterval = setInterval(async () => {
-      try {
-        await refreshToken();
-      } catch (error) {
-        console.error('Token refresh failed:', error);
-        await logout();
-      }
-    }, 14 * 60 * 1000); // Refresh every 14 minutes (assuming 15min token expiry)
-
-    return () => clearInterval(refreshInterval);
-  }, [user]);
+  // Removed duplicate auto-refresh - using the one below with better error handling
 
   const login = async (credentials: LoginCredentials): Promise<boolean> => {
     try {
@@ -140,7 +126,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }, []);
 
-  // Auto-refresh token every 14 minutes
+  // Auto-refresh token every 23 hours (1 hour before 24h token expiry)
   useEffect(() => {
     if (isAuthenticated) {
       const interval = setInterval(async () => {
@@ -148,9 +134,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
           await refreshToken();
         } catch (error) {
           console.error('Auto token refresh failed:', error);
-          // Don't logout on auto-refresh failure, let user continue
+          // If refresh fails, logout user for security
+          await logout();
+          toast({
+            title: "Session expirée",
+            description: "Votre session a expiré. Veuillez vous reconnecter.",
+            variant: "destructive",
+          });
         }
-      }, 14 * 60 * 1000); // 14 minutes
+      }, 23 * 60 * 60 * 1000); // 23 hours (refresh 1 hour before 24h token expiry)
 
       return () => clearInterval(interval);
     }

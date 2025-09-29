@@ -367,13 +367,9 @@ const Blog = () => {
         </div>
       </div>
 
-      <Tabs defaultValue='articles' className='space-y-6'>
-        <TabsList className='grid w-full grid-cols-2 lg:w-96'>
-          <TabsTrigger value='articles'>Articles</TabsTrigger>
-          <TabsTrigger value='categories'>Catégories</TabsTrigger>
-        </TabsList>
+      <div className='space-y-6'>
 
-        <TabsContent value='articles' className='space-y-6'>
+        <div className='space-y-6'>
           {/* Filters */}
           <Card>
             <CardContent className='p-6'>
@@ -690,42 +686,9 @@ const Blog = () => {
               )}
             </CardContent>
           </Card>
-        </TabsContent>
-
-        <TabsContent value='categories' className='space-y-6'>
-          <Card>
-            <CardHeader>
-              <CardTitle>Gestion des catégories</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4'>
-                {categories.map((category) => (
-                  <div
-                    key={category.id}
-                    className='p-4 border rounded-lg flex justify-between items-center'
-                  >
-                    <span className='font-medium'>{category.name}</span>
-                    <div className='flex gap-2'>
-                      <Button variant='ghost' size='sm'>
-                        <Edit className='h-4 w-4' />
-                      </Button>
-                      <Button variant='ghost' size='sm'>
-                        <Trash2 className='h-4 w-4 text-destructive' />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-                <div className='p-4 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center'>
-                  <Button variant='ghost' className='text-gray-500'>
-                    <Plus className='h-4 w-4 mr-2' />
-                    Ajouter une catégorie
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+        </div>
+      
+      </div>
 
       {/* Blog Editor Modal */}
       {isEditorOpen && (
@@ -782,5 +745,4 @@ const Blog = () => {
     </div>
   )
 }
-
 export default Blog

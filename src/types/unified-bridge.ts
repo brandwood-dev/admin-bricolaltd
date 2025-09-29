@@ -37,9 +37,9 @@ export enum AvailabilityStatus {
 
 export enum BookingStatus {
   PENDING = 'PENDING',
-  CONFIRMED = 'CONFIRMED',
+  ACCEPTED = 'ACCEPTED', // confirmed
   REJECTED = 'REJECTED',
-  APPROVED = 'APPROVED',
+  ONGOING = 'ONGOING', // approved
   CANCELLED = 'CANCELLED',
   COMPLETED = 'COMPLETED',
 }
@@ -231,6 +231,19 @@ export interface Tool extends BaseEntity {
   owner?: User;
   bookings?: Booking[];
   bookmarks?: Bookmark[];
+  photos?: ToolPhoto[];
+}
+
+export interface ToolPhoto extends BaseEntity {
+  url: string;
+  filename: string;
+  isPrimary: boolean;
+  
+  // Foreign Keys
+  toolId: string;
+  
+  // Relationships
+  tool?: Tool;
 }
 
 export interface Booking extends BaseEntity {
@@ -245,10 +258,12 @@ export interface Booking extends BaseEntity {
   // Foreign Keys
   toolId: string;
   renterId: string;
+  ownerId: string;
   
   // Relationships
   tool?: Tool;
   renter?: User;
+  owner?: User;
 }
 
 export interface Transaction extends BaseEntity {
@@ -566,12 +581,23 @@ export interface WithdrawalFilterParams extends FilterParams {
 export interface BookingStats {
   totalBookings: number;
   pendingBookings: number;
-  confirmedBookings: number;
+  acceptedBookings: number; // Renamed from confirmedBookings to match backend
+  ongoingBookings: number; // Added for ONGOING status
   completedBookings: number;
   cancelledBookings: number;
+  rejectedBookings: number;
   totalRevenue: number;
   averageBookingValue: number;
-  bookingGrowthRate: number;
+  popularTools: Array<{
+    toolId: string;
+    toolTitle: string;
+    bookingCount: number;
+  }>;
+  statusBreakdown: Array<{
+    status: string;
+    count: number;
+    percentage: number;
+  }>;
 }
 
 export interface ToolStats {

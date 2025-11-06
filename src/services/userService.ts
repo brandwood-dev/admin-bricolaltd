@@ -66,7 +66,46 @@ export interface UserNotificationData {
 class UserService {
   // CRUD Operations
   async getUsers(params?: UserFilterParams): Promise<ApiResponse<PaginatedResponse<User>>> {
-    return await apiClient.get<PaginatedResponse<User>>('/users', { params });
+    const response = await apiClient.get<any>('/users', { params });
+
+    // L'API renvoie { data: {...}, message: '...' } où data peut contenir { data: [...], total, page, limit, totalPages }
+    const payload = response?.data;
+
+    // Normaliser le conteneur: si payload.data existe et contient des champs de pagination, l'utiliser
+    const container = payload?.data && (Array.isArray(payload?.data?.data) || typeof payload?.data?.total !== 'undefined')
+      ? payload.data
+      : payload;
+
+    // Extraire les utilisateurs
+    const arrayData: User[] = Array.isArray(container)
+      ? container as User[]
+      : Array.isArray(container?.data)
+        ? container.data as User[]
+        : Array.isArray(payload)
+          ? (payload as User[])
+          : [];
+
+    // Extraire les métadonnées de pagination
+    const page = typeof container?.page === 'number' ? container.page : (params?.page ?? 1);
+    const limit = typeof container?.limit === 'number' ? container.limit : (params?.limit ?? (arrayData.length || 10));
+    const total = typeof container?.total === 'number' ? container.total : (Array.isArray(arrayData) ? arrayData.length : 0);
+    const totalPages = typeof container?.totalPages === 'number' ? container.totalPages : Math.max(1, Math.ceil(total / limit));
+
+    const paginated: PaginatedResponse<User> = {
+      data: arrayData,
+      meta: { page, limit, total, totalPages },
+      total,
+      page,
+      limit,
+      totalPages,
+    };
+
+    return {
+      ...response,
+      data: paginated,
+      success: response?.success ?? true,
+      message: response?.message ?? 'Request successful',
+    };
   }
 
   async getUserById(id: string): Promise<ApiResponse<User>> {
@@ -136,105 +175,65 @@ class UserService {
     return await apiClient.patch<Wallet>(`/users/${id}/wallet/unfreeze`);
   }
 
-  // Bulk Operations
   async bulkUserAction(action: BulkUserAction): Promise<ApiResponse<{ success: number; failed: number; errors: string[] }>> {
-    return await apiClient.post<{ success: number; failed: number; errors: string[] }>('/users/bulk-action', action);
+    return await apiClient.post<{ success: number; failed: number; errors: string[] }>(`/users/bulk-action`, action);
   }
 
   async bulkExportUsers(params?: UserFilterParams): Promise<ApiResponse<{ downloadUrl: string }>> {
-    return await apiClient.post<{ downloadUrl: string }>('/users/export', { params });
+    return await apiClient.get<{ downloadUrl: string }>(`/users/export/csv`, { params });
   }
 
-  // Search and Filtering
   async searchUsers(query: string, filters?: Partial<UserFilterParams>): Promise<ApiResponse<PaginatedResponse<User>>> {
-    return await apiClient.get<PaginatedResponse<User>>('/users/search', {
-      params: { search: query, ...filters }
-    });
+    const response = await apiClient.get<any>(`/users/search`, { params: { query, ...filters } });
+    const payload = response?.data;
+    const container = payload?.data && (Array.isArray(payload?.data?.data) || typeof payload?.data?.total !== 'undefined')
+      ? payload.data
+      : payload;
+    const arrayData: User[] = Array.isArray(container?.data) ? container.data : [];
+    const page = typeof container?.page === 'number' ? container.page : 1;
+    const limit = typeof container?.limit === 'number' ? container.limit : (arrayData.length || 10);
+    const total = typeof container?.total === 'number' ? container.total : arrayData.length;
+    const totalPages = typeof container?.totalPages === 'number' ? container.totalPages : Math.max(1, Math.ceil(total / limit));
+    const paginated: PaginatedResponse<User> = { data: arrayData, meta: { page, limit, total, totalPages }, total, page, limit, totalPages };
+    return { ...response, data: paginated, success: response?.success ?? true, message: response?.message ?? 'Request successful' };
   }
 
   async getUsersByCountry(): Promise<ApiResponse<{ country: string; count: number }[]>> {
-    return await apiClient.get<{ country: string; count: number }[]>('/users/by-country');
+    return await apiClient.get<{ country: string; count: number }[]>(`/users/analytics/by-country`);
   }
 
   async getUsersByRegistrationDate(startDate: string, endDate: string): Promise<ApiResponse<{ date: string; count: number }[]>> {
-    return await apiClient.get<{ date: string; count: number }[]>('/users/by-registration-date', {
-      params: { startDate, endDate }
-    });
+    return await apiClient.get<{ date: string; count: number }[]>(`/users/analytics/by-date`, { params: { startDate, endDate } });
   }
 
-  // Data Export
   async exportUsersCSV(params?: UserFilterParams): Promise<ApiResponse<Blob>> {
-    return await apiClient.downloadFile('/users/export/csv', { params });
+    return await apiClient.get<Blob>(`/users/export/csv`, { params, responseType: 'blob' });
   }
 
   async exportUsersExcel(params?: UserFilterParams): Promise<ApiResponse<Blob>> {
-    return await apiClient.downloadFile('/users/export/excel', { params });
+    return await apiClient.get<Blob>(`/users/export/excel`, { params, responseType: 'blob' });
   }
 
-  // User Analytics
   async getUserStats(): Promise<ApiResponse<UserStats>> {
-    return await apiClient.get<UserStats>('/users/stats');
+    return await apiClient.get<UserStats>(`/users/stats`);
   }
 
   async getUserGrowthAnalytics(period: 'week' | 'month' | 'year'): Promise<ApiResponse<{ date: string; newUsers: number; totalUsers: number }[]>> {
-    return await apiClient.get<{ date: string; newUsers: number; totalUsers: number }[]>('/users/analytics/growth', {
-      params: { period }
-    });
+    return await apiClient.get<{ date: string; newUsers: number; totalUsers: number }[]>(`/users/analytics/growth`, { params: { period } });
   }
 
   async getUserActivityAnalytics(userId: string, period: 'week' | 'month' | 'year'): Promise<ApiResponse<{ date: string; activities: number }[]>> {
-    return await apiClient.get<{ date: string; activities: number }[]>(`/users/analytics/activity`, {
-      params: { period }
-    });
+    return await apiClient.get<{ date: string; activities: number }[]>(`/users/${userId}/analytics/activity`, { params: { period } });
   }
 
-  // User Impersonation
   async impersonateUser(id: string): Promise<ApiResponse<{ token: string; user: User }>> {
     return await apiClient.post<{ token: string; user: User }>(`/users/${id}/impersonate`);
   }
 
   async stopImpersonation(): Promise<ApiResponse<null>> {
-    return await apiClient.post<null>('/users/stop-impersonation');
-  }
-
-  // User Notifications
-  async sendNotificationToUsers(data: UserNotificationData): Promise<ApiResponse<{ sent: number; failed: number }>> {
-    return await apiClient.post<{ sent: number; failed: number }>('/users/send-notification', data);
-  }
-
-  async sendNotificationToUser(id: string, title: string, message: string, type: 'info' | 'warning' | 'success' | 'error'): Promise<ApiResponse<null>> {
-    return await apiClient.post<null>(`/users/${id}/send-notification`, { title, message, type });
-  }
-
-  // Related Data Access
-  async getUserTransactions(id: string, params?: { page?: number; limit?: number }): Promise<ApiResponse<PaginatedResponse<Transaction>>> {
-    return await apiClient.get<PaginatedResponse<Transaction>>(`/users/${id}/transactions`, { params });
-  }
-
-  async getUserBookings(id: string, params?: { page?: number; limit?: number }): Promise<ApiResponse<PaginatedResponse<Booking>>> {
-    return await apiClient.get<PaginatedResponse<Booking>>(`/users/${id}/bookings`, { params });
-  }
-
-  async getUserTools(id: string, params?: { page?: number; limit?: number }): Promise<ApiResponse<PaginatedResponse<Tool>>> {
-    return await apiClient.get<PaginatedResponse<Tool>>(`/users/${id}/tools`, { params });
-  }
-
-  async getUserActivities(id: string, params?: { page?: number; limit?: number; type?: ActivityType }): Promise<ApiResponse<PaginatedResponse<UserActivity>>> {
-    return await apiClient.get<PaginatedResponse<UserActivity>>(`/users/${id}/activities`, { params });
-  }
-
-  async getUserDocuments(id: string, params?: { page?: number; limit?: number }): Promise<ApiResponse<PaginatedResponse<Document>>> {
-    return await apiClient.get<PaginatedResponse<Document>>(`/users/${id}/documents`, { params });
-  }
-
-  // Password Management
-  async resetUserPassword(id: string, newPassword: string, sendEmail?: boolean): Promise<ApiResponse<null>> {
-    return await apiClient.post<null>(`/users/${id}/reset-password`, { newPassword, sendEmail });
-  }
-
-  async forcePasswordChange(id: string): Promise<ApiResponse<null>> {
-    return await apiClient.post<null>(`/users/${id}/force-password-change`);
+    return await apiClient.post<null>(`/users/impersonate/stop`);
   }
 }
 
 export const userService = new UserService();
+export type { User, Wallet, Transaction, Booking, Tool, Document, UserActivity, ActivityType };

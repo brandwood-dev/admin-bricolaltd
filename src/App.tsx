@@ -19,7 +19,7 @@ import Contacts from "./pages/admin/Contacts";
 import Withdrawals from "./pages/admin/Withdrawals";
 import AdminLogin from "./pages/admin/Login";
 import Profile from "./pages/admin/Profile";
-import Analytics from "./pages/admin/Analytics";
+// import Analytics from "./pages/admin/Analytics"; // removed after merge
 import Transactions from "./pages/admin/Transactions";
 import Settings from "./pages/admin/Settings";
 import Security from "./pages/admin/Security";
@@ -86,14 +86,7 @@ const App = () => (
                   </ProtectedRoute>
                 } 
               />
-              <Route
-                path="analytics"
-                element={
-                  <ProtectedRoute requiredPermission="view_analytics">
-                    <Analytics />
-                  </ProtectedRoute>
-                }
-              />
+              {/* Removed /admin/analytics route after merging into Dashboard */}
               <Route
                 path="transactions"
                 element={

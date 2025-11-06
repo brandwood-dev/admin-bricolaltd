@@ -22,42 +22,20 @@ import { Switch } from '@/components/ui/switch'
 import {
   Save,
   Eye,
-  Upload,
   Loader2,
   AlertCircle,
   Edit3,
   X,
-  Plus,
-  GripVertical,
-  Type,
-  AlignLeft,
-  Image,
-  Video,
-  Send,
-  Bold,
-  Italic,
-  Underline,
-  List,
-  ListOrdered,
-  Link,
-  Quote,
-  Code,
-  AlignCenter,
 } from 'lucide-react'
 import ReactQuill from 'react-quill'
 import 'react-quill/dist/quill.snow.css'
-import { newsService, Category } from '../../services/newsService'
+import { newsService } from '../../services/newsService'
 import { useToast } from '@/hooks/use-toast'
 
 interface BlogEditorProps {
-  article?: News | null
+  article?: any | null
   isOpen: boolean
   onClose: () => void
-}
-// Using Category interface from newsService
-interface staticCategory {
-  id: string
-  name: string
 }
 
 const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
@@ -66,7 +44,6 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
   const [content, setContent] = useState('')
   const [imageUrl, setImageUrl] = useState('')
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
-  const [useFileUpload, setUseFileUpload] = useState(false)
   const [category, setCategory] = useState('')
   const [isPublic, setIsPublic] = useState(true)
   const [isFeatured, setIsFeatured] = useState(false)
@@ -75,14 +52,16 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
   const [additionalImages, setAdditionalImages] = useState<
     { file: File; url: string; name: string }[]
   >([])
-  // const [categories, setCategories] = useState<Category[]>([])
   const [loadingCategories, setLoadingCategories] = useState(false)
   const { toast } = useToast()
 
-  // Ref pour ReactQuill pour éviter le warning findDOMNode
+  // Nouveaux états pour UX et validation
+  const [progressStep, setProgressStep] = useState('')
+  const [isDirty, setIsDirty] = useState(false)
+  const [canSubmit, setCanSubmit] = useState(true)
+
   const quillRef = useRef<ReactQuill>(null)
 
-  // ReactQuill modules configuration
   const quillModules = {
     toolbar: [
       [{ header: [1, 2, 3, false] }],
@@ -107,8 +86,8 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
     'link',
     'image',
   ]
-  // Fixed categories list
-  const categories: staticCategory[] = [
+
+  const categories = [
     { id: '1', name: 'Jardinage' },
     { id: '2', name: 'Entretien' },
     { id: '3', name: 'Transport' },
@@ -122,39 +101,50 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
     { id: '11', name: 'Décoration' },
     { id: '12', name: 'Guide' },
   ]
-  // Load categories from API
-  // useEffect(() => {
-  //   const loadCategories = async () => {
-  //     if (!isOpen) return;
 
-  //     setLoadingCategories(true);
-  //     try {
-  //       const response = await newsService.getCategories();
-  //       console.log('📂 [BlogEditor] Catégories chargées:', response.data);
+  // Autosave brouillon local
+  const DRAFT_KEY = 'blog-editor-draft'
+  useEffect(() => {
+    if (isOpen && !article) {
+      try {
+        const saved = localStorage.getItem(DRAFT_KEY)
+        if (saved) {
+          const draft = JSON.parse(saved)
+          setTitle(draft.title || '')
+          setSummary(draft.summary || '')
+          setContent(draft.content || '')
+          setCategory(draft.category || '')
+          setIsPublic(draft.isPublic ?? true)
+          setIsFeatured(draft.isFeatured ?? false)
+        }
+      } catch {}
+    }
+  }, [isOpen, article])
 
-  //       if (response.data?.data) {
-  //         setCategories(response.data.data);
-  //       } else {
-  //         console.warn('⚠️ [BlogEditor] Format de réponse inattendu pour les catégories:', response.data);
-  //         setCategories([]);
-  //       }
-  //     } catch (error) {
-  //       console.error('❌ [BlogEditor] Erreur lors du chargement des catégories:', error);
-  //       toast({
-  //         title: "Erreur",
-  //         description: "Impossible de charger les catégories",
-  //         variant: "destructive",
-  //       });
-  //       setCategories([]);
-  //     } finally {
-  //       setLoadingCategories(false);
-  //     }
-  //   };
+  useEffect(() => {
+    if (!isOpen) return
+    const payload = {
+      title,
+      summary,
+      content,
+      category,
+      isPublic,
+      isFeatured,
+    }
+    try {
+      localStorage.setItem(DRAFT_KEY, JSON.stringify(payload))
+    } catch {}
+  }, [title, summary, content, category, isPublic, isFeatured, isOpen])
 
-  //   loadCategories();
-  // }, [isOpen, toast]);
+  // Confirmation avant fermeture si modifications non enregistrées
+  const requestClose = () => {
+    if (isDirty) {
+      const ok = window.confirm('Vous avez des modifications non enregistrées. Voulez-vous fermer malgré tout ?')
+      if (!ok) return
+    }
+    onClose()
+  }
 
-  // Initialize form with article data when editing
   useEffect(() => {
     if (article) {
       setTitle(article.title || '')
@@ -165,13 +155,11 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
       setIsPublic(article.isPublic ?? true)
       setIsFeatured(article.isFeatured ?? false)
     } else {
-      // Reset form for new article
       setTitle('')
       setSummary('')
       setContent('')
       setImageUrl('')
       setSelectedFiles([])
-      setUseFileUpload(false)
       setCategory('')
       setIsPublic(true)
       setIsFeatured(false)
@@ -179,95 +167,96 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
     setErrors({})
   }, [article, isOpen])
 
-  // Validation function - returns object with field-specific errors
-  const validateForm = () => {
-    console.log('🔍 [BlogEditor] validateForm - Début validation avec:', {
-      title: title ? `"${title.substring(0, 30)}..."` : 'VIDE',
-      titleLength: title?.length || 0,
-      content: content ? `"${content.substring(0, 50)}..."` : 'VIDE',
-      contentLength: content?.length || 0,
-    })
+  useEffect(() => {
+    const trimmedTitle = title.trim()
+    const trimmedContent = content.trim()
+    const hasFieldErrors = Object.keys(errors).length > 0
+    const basicInvalid =
+      !trimmedTitle || trimmedTitle.length < 5 || trimmedTitle.length > 200 ||
+      !trimmedContent || trimmedContent.length < 50 ||
+      !category || category === '' || category === 'none'
+    setCanSubmit(!hasFieldErrors && !basicInvalid)
+    setIsDirty(
+      !!(trimmedTitle || summary || trimmedContent || imageUrl || category || selectedFiles.length || additionalImages.length)
+    )
+  }, [title, summary, content, imageUrl, category, selectedFiles, additionalImages, errors])
 
+  const validateForm = () => {
     const fieldErrors: { [key: string]: string } = {}
 
-    // Validation du titre
-    console.log('📝 [BlogEditor] Validation titre...')
     if (!title || title.trim().length === 0) {
       fieldErrors.title = 'Le titre est obligatoire'
-      console.log('❌ [BlogEditor] Titre manquant')
-    } else if (title.trim().length < 3) {
-      fieldErrors.title = 'Le titre doit contenir au moins 3 caractères'
-      console.log('❌ [BlogEditor] Titre trop court:', title.trim().length)
+    } else if (title.trim().length < 5) {
+      fieldErrors.title = 'Le titre doit contenir au moins 5 caractères'
     } else if (title.trim().length > 200) {
       fieldErrors.title = 'Le titre ne peut pas dépasser 200 caractères'
-      console.log('❌ [BlogEditor] Titre trop long:', title.trim().length)
-    } else {
-      console.log('✅ [BlogEditor] Titre valide')
     }
 
-    // Validation du contenu
-    console.log('📄 [BlogEditor] Validation contenu...')
     if (!content || content.trim().length === 0 || content === '<p><br></p>') {
       fieldErrors.content = 'Le contenu est obligatoire'
-      console.log('❌ [BlogEditor] Contenu manquant')
-    } else if (content.trim().length < 10) {
-      fieldErrors.content = 'Le contenu doit contenir au moins 10 caractères'
-      console.log('❌ [BlogEditor] Contenu trop court:', content.trim().length)
-    } else {
-      console.log('✅ [BlogEditor] Contenu valide')
+    } else if (content.trim().length < 50) {
+      fieldErrors.content = 'Le contenu doit contenir au moins 50 caractères'
     }
 
-    console.log('📊 [BlogEditor] validateForm - Résultat final:', {
-      errorsCount: Object.keys(fieldErrors).length,
-      errors: fieldErrors,
-    })
+    if (!category || category === '' || category === 'none') {
+      fieldErrors.category = 'La catégorie est obligatoire'
+    }
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
+    const maxSize = 5 * 1024 * 1024
+    if (selectedFiles && selectedFiles.length > 0) {
+      const file = selectedFiles[0]
+      if (!allowedTypes.includes(file.type)) {
+        fieldErrors.coverImage = 'Le fichier doit être une image (jpg, png, webp)'
+      } else if (file.size > maxSize) {
+        fieldErrors.coverImage = "L'image doit être inférieure à 5 Mo"
+      }
+    }
+
+    const additionalFromSelected = selectedFiles.length > 1 ? selectedFiles.length - 1 : 0
+    const totalAdditional = additionalImages.length + additionalFromSelected
+    if (totalAdditional > 5) {
+      fieldErrors.additionalImages = 'Maximum 5 images additionnelles autorisées'
+    }
 
     return fieldErrors
   }
 
-  // Validate individual field
   const validateField = (fieldName: string, value: string) => {
     const fieldErrors: { [key: string]: string } = {}
-
     switch (fieldName) {
       case 'title':
         if (!value.trim()) {
           fieldErrors.title = 'Le titre est obligatoire'
+        } else if (value.trim().length < 5) {
+          fieldErrors.title = 'Le titre doit contenir au moins 5 caractères'
+        } else if (value.trim().length > 200) {
+          fieldErrors.title = 'Le titre ne peut pas dépasser 200 caractères'
         }
         break
       case 'content':
         if (!value.trim() || value === '<p><br></p>') {
           fieldErrors.content = 'Le contenu est obligatoire'
+        } else if (value.trim().length < 50) {
+          fieldErrors.content = 'Le contenu doit contenir au moins 50 caractères'
+        }
+        break
+      case 'category':
+        if (!value || value === '' || value === 'none') {
+          fieldErrors.category = 'La catégorie est obligatoire'
         }
         break
     }
-
     return fieldErrors
   }
 
-  // Fonction pour gérer l'upload d'image de couverture
-  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onload = (e) => {
-        setImageUrl(e.target?.result as string)
-      }
-      reader.readAsDataURL(file)
-    }
-  }
-
-  // Handle field changes with validation
   const handleTitleChange = (value: string) => {
     setTitle(value)
     const fieldErrors = validateField('title', value)
     setErrors((prev) => {
       const newErrors = { ...prev }
-      if (fieldErrors.title) {
-        newErrors.title = fieldErrors.title
-      } else {
-        delete newErrors.title
-      }
+      if (fieldErrors.title) newErrors.title = fieldErrors.title
+      else delete newErrors.title
       return newErrors
     })
   }
@@ -277,38 +266,24 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
     const fieldErrors = validateField('content', value)
     setErrors((prev) => {
       const newErrors = { ...prev }
-      if (fieldErrors.content) {
-        newErrors.content = fieldErrors.content
-      } else {
-        delete newErrors.content
-      }
+      if (fieldErrors.content) newErrors.content = fieldErrors.content
+      else delete newErrors.content
       return newErrors
     })
   }
 
+  const removeAdditionalImage = (index: number) => {
+    setAdditionalImages((prev) => prev.filter((_, i) => i !== index))
+  }
+
   const handleSave = async (isDraft: boolean = false) => {
     try {
-      console.log('🚀 [BlogEditor] Début de handleSave avec paramètres:', {
-        isDraft,
-        articleId: article?.id,
-        title: title?.substring(0, 50) + '...',
-        contentLength: content?.length,
-        selectedFilesCount: selectedFiles?.length || 0,
-      })
-
       setLoading(true)
-
-      // Validation complète des champs
-      console.log('🔍 [BlogEditor] Début de la validation...')
+      setProgressStep('Validation du formulaire…')
       const fieldErrors = validateForm()
-      console.log('📋 [BlogEditor] Résultat de la validation:', {
-        errorsCount: Object.keys(fieldErrors).length,
-        errors: fieldErrors,
-      })
-
       if (Object.keys(fieldErrors).length > 0) {
         setErrors(fieldErrors)
-        console.log('❌ [BlogEditor] Validation échouée, arrêt du processus')
+        setProgressStep('')
         toast({
           title: 'Erreur de validation',
           description: 'Veuillez corriger les erreurs dans le formulaire',
@@ -317,159 +292,83 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
         return
       }
 
-      // Clear errors if validation passes
       setErrors({})
-      console.log(
-        '✅ [BlogEditor] Validation réussie, préparation des données...'
-      )
-
-      // Préparation des données selon le DTO de l'API
+      setProgressStep('Préparation des données…')
       const newsData: any = {
         title: title.trim(),
         content: content.trim(),
         isPublic: isDraft ? false : isPublic,
         isFeatured: isFeatured,
       }
+      if (summary.trim()) newsData.summary = summary.trim()
+      if (category && category !== 'none') newsData.category = category
 
-      // Champs optionnels
-      if (summary.trim()) {
-        newsData.summary = summary.trim()
+      // Construire les fichiers à envoyer: 1er = image de couverture, puis images additionnelles
+      const filesToSend: File[] = []
+      if (selectedFiles && selectedFiles.length > 0) {
+        filesToSend.push(selectedFiles[0])
+      }
+      if (additionalImages && additionalImages.length > 0) {
+        additionalImages.forEach((img) => {
+          if (img.file) filesToSend.push(img.file)
+        })
       }
 
-      if (category && category !== 'none') {
-        newsData.category = category
-      }
-
-      // Images additionnelles (si supportées par l'API)
-      if (additionalImages.length > 0) {
-        newsData.additionalImages = additionalImages.map((img) => img.url)
-      }
-
-      console.log('📦 [BlogEditor] Données préparées:', {
-        newsData: {
-          ...newsData,
-          content: newsData.content?.substring(0, 100) + '...', // Tronquer le contenu pour les logs
-        },
-        selectedFilesInfo:
-          selectedFiles?.map((f) => ({
-            name: f.name,
-            size: f.size,
-            type: f.type,
-          })) || [],
-      })
-
-      console.log('🌐 [BlogEditor] Appel API en cours...')
+      setProgressStep(article?.id ? 'Mise à jour en cours…' : 'Création en cours…')
       let response
       if (article?.id) {
-        console.log(
-          '🔄 [BlogEditor] Mise à jour article existant, ID:',
-          article.id
-        )
-        response = await newsService.updateNews(
-          article.id,
-          newsData,
-          selectedFiles
-        )
+        // Si une nouvelle image de couverture est fournie, activer le remplacement côté service
+        if (selectedFiles && selectedFiles.length > 0) {
+          newsData.replaceMainImage = true
+        }
+        response = await newsService.updateNews(article.id, newsData, filesToSend)
       } else {
-        console.log('➕ [BlogEditor] Création nouvel article')
-        response = await newsService.createNews(newsData, selectedFiles)
+        response = await newsService.createNews(newsData, filesToSend)
       }
 
-      console.log('📡 [BlogEditor] Réponse API reçue:', {
-        status: response?.status,
-        hasData: !!response?.data,
-        hasDataData: !!response?.data?.data,
-        responseStructure: {
-          data: response?.data ? Object.keys(response.data) : 'N/A',
-          dataData: response?.data?.data
-            ? Object.keys(response.data.data)
-            : 'N/A',
-        },
-      })
-
-      // Vérification de la structure de réponse API
+      setProgressStep('Finalisation…')
       if (response?.data) {
-        console.log('✅ [BlogEditor] Sauvegarde réussie!')
         toast({
           title: 'Succès',
-          description: article?.id
-            ? 'Article mis à jour avec succès'
-            : 'Article créé avec succès',
+          description: article?.id ? 'Article mis à jour avec succès' : 'Article créé avec succès',
           variant: 'default',
         })
-
-        // Fermer le modal
+        setProgressStep('')
+        try { localStorage.removeItem(DRAFT_KEY) } catch {}
         onClose()
       } else {
-        console.log('❌ [BlogEditor] Format de réponse API inattendu')
         throw new Error('Format de réponse API inattendu')
       }
     } catch (error: any) {
-      console.error('💥 [BlogEditor] Erreur lors de la sauvegarde:', {
-        message: error?.message,
-        status: error?.response?.status,
-        statusText: error?.response?.statusText,
-        responseData: error?.response?.data,
-        fullError: error,
-      })
-
-      // Messages d'erreur spécifiques selon le type d'erreur
-      let errorMessage = "Une erreur inattendue s'est produite"
-
-      if (error.response?.status === 400) {
-        errorMessage = 'Données invalides. Vérifiez les champs obligatoires.'
-      } else if (error.response?.status === 401) {
-        errorMessage = 'Session expirée. Veuillez vous reconnecter.'
-      } else if (error.response?.status === 403) {
-        errorMessage = "Vous n'avez pas les permissions nécessaires."
-      } else if (error.response?.status === 413) {
-        errorMessage = 'Les fichiers sont trop volumineux.'
-      } else if (error.response?.status === 500) {
-        errorMessage = 'Erreur serveur. Veuillez réessayer plus tard.'
-      } else if (error.message) {
-        errorMessage = error.message
+      setProgressStep('')
+      const apiErrors = error?.response?.data?.errors
+      if (apiErrors && typeof apiErrors === 'object') {
+        const mapped: { [key: string]: string } = {}
+        Object.keys(apiErrors).forEach((field) => {
+          const msgs = apiErrors[field]
+          if (Array.isArray(msgs) && msgs.length > 0) {
+            mapped[field] = msgs[0]
+          }
+        })
+        setErrors(mapped)
       }
 
-      toast({
-        title: 'Erreur lors de la sauvegarde',
-        description: errorMessage,
-        variant: 'destructive',
-      })
+      let errorMessage = "Une erreur inattendue s'est produite"
+      if (error.response?.status === 400) errorMessage = 'Données invalides. Vérifiez les champs obligatoires.'
+      else if (error.response?.status === 401) errorMessage = 'Session expirée. Veuillez vous reconnecter.'
+      else if (error.response?.status === 403) errorMessage = "Vous n'avez pas les permissions nécessaires."
+      else if (error.response?.status === 413) errorMessage = 'Les fichiers sont trop volumineux.'
+      else if (error.response?.status === 500) errorMessage = 'Erreur serveur. Veuillez réessayer plus tard.'
+      else if (error.message) errorMessage = error.message
+
+      toast({ title: 'Erreur lors de la sauvegarde', description: errorMessage, variant: 'destructive' })
     } finally {
       setLoading(false)
     }
   }
 
-  // Fonction pour gérer l'upload d'images additionnelles
-  const handleAdditionalImagesUpload = (
-    e: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const files = e.target.files
-    if (files) {
-      const newImages = Array.from(files).map((file) => ({
-        file,
-        url: URL.createObjectURL(file),
-        name: file.name,
-      }))
-      setAdditionalImages((prev) => [...prev, ...newImages])
-    }
-  }
-
-  // Fonction pour supprimer une image additionnelle
-  const removeAdditionalImage = (index: number) => {
-    setAdditionalImages((prev) => {
-      const updated = [...prev]
-      // Libérer l'URL de l'objet pour éviter les fuites mémoire
-      if (updated[index].url.startsWith('blob:')) {
-        URL.revokeObjectURL(updated[index].url)
-      }
-      updated.splice(index, 1)
-      return updated
-    })
-  }
-
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={(open) => { if (!open) { requestClose() } }}>
       <DialogContent className='max-w-[95vw] sm:max-w-[90vw] lg:max-w-6xl max-h-[95vh] overflow-hidden flex flex-col p-0'>
         <div className='p-4 sm:p-6 border-b'>
           <DialogHeader>
@@ -484,8 +383,30 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
         </div>
 
         <div className='flex-1 overflow-y-auto p-4 sm:p-6'>
+          {Object.keys(errors).length > 0 && (
+            <div className='mb-4 p-3 border border-red-200 bg-red-50 text-red-700 rounded'>
+              <div className='flex items-center mb-2'>
+                <AlertCircle className='h-4 w-4 mr-2' />
+                <span>Veuillez corriger les erreurs suivantes :</span>
+              </div>
+              <ul className='list-disc list-inside text-sm'>
+                {Object.entries(errors).map(([key, message]) => (
+                  <li key={key}>{message}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {loading && progressStep && (
+            <div className='mb-4 p-3 border border-blue-200 bg-blue-50 text-blue-700 rounded'>
+              <div className='flex items-center'>
+                <Loader2 className='h-4 w-4 mr-2 animate-spin' />
+                <span>{progressStep}</span>
+              </div>
+            </div>
+          )}
+
           <div className='grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6'>
-            {/* Sidebar - Article meta */}
             <div className='space-y-4 sm:space-y-6 order-2 lg:order-1'>
               <Card>
                 <CardContent className='p-4 space-y-4'>
@@ -525,13 +446,17 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
                   </div>
 
                   <div className='space-y-2'>
-                    <Label htmlFor='category'>Catégorie</Label>
+                    <Label htmlFor='category'>Catégorie *</Label>
                     <Select
                       value={category}
-                      onValueChange={setCategory}
+                      onValueChange={(val) => {
+                        setCategory(val)
+                        const fieldErrors = validateField('category', val)
+                        setErrors((prev) => ({ ...prev, ...fieldErrors }))
+                      }}
                       disabled={loadingCategories}
                     >
-                      <SelectTrigger>
+                      <SelectTrigger className={`${errors.category ? 'border-red-500 focus:border-red-500' : ''}`}>
                         <SelectValue
                           placeholder={
                             loadingCategories
@@ -548,50 +473,73 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
                         ))}
                       </SelectContent>
                     </Select>
+                    {errors.category && (
+                      <div className='flex items-center gap-1 text-red-500 text-sm'>
+                        <AlertCircle className='h-4 w-4' />
+                        <span>{errors.category}</span>
+                      </div>
+                    )}
                   </div>
 
                   <div className='space-y-2'>
-                    <Label>Image de couverture</Label>
+                      <Label>Image de couverture</Label>
 
-                    <div className='space-y-2'>
-                      <Input
-                        type='file'
-                        accept='image/*'
-                        onChange={(e) => {
-                          const files = e.target.files
-                          if (files && files.length > 0) {
-                            setSelectedFiles([files[0]])
-                          }
-                        }}
-                      />
+                      <div className='space-y-2'>
+                        <Input
+                          type='file'
+                          accept='image/*'
+                          onChange={(e) => {
+                            const files = e.target.files
+                            if (files && files.length > 0) {
+                              const file = files[0]
+                              const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
+                              const maxSize = 5 * 1024 * 1024
+                              const newErrors: any = { ...errors }
+                              if (!allowedTypes.includes(file.type)) {
+                                newErrors.coverImage = 'Le fichier doit être une image (jpg, png, webp)'
+                              } else if (file.size > maxSize) {
+                                newErrors.coverImage = "L'image doit être inférieure à 5 Mo"
+                              } else {
+                                delete newErrors.coverImage
+                              }
+                              setErrors(newErrors)
+                              setSelectedFiles([file])
+                            }
+                          }}
+                        />
+                        {errors.coverImage && (
+                          <div className='flex items-center gap-1 text-red-500 text-sm'>
+                            <AlertCircle className='h-4 w-4' />
+                            <span>{errors.coverImage}</span>
+                          </div>
+                        )}
+                        {selectedFiles.length > 0 && (
+                          <p className='text-sm text-gray-600'>
+                            Fichier sélectionné: {selectedFiles[0].name} ({selectedFiles[0].type || 'type inconnu'}, {(selectedFiles[0].size / (1024 * 1024)).toFixed(2)} Mo)
+                          </p>
+                        )}
+                      </div>
+
+                      {imageUrl && (
+                        <div className='aspect-video bg-gray-100 rounded-lg overflow-hidden'>
+                          <img
+                            src={imageUrl}
+                            alt='Cover preview'
+                            className='w-full h-full object-cover'
+                          />
+                        </div>
+                      )}
+
                       {selectedFiles.length > 0 && (
-                        <p className='text-sm text-gray-600'>
-                          Fichier sélectionné: {selectedFiles[0].name}
-                        </p>
+                        <div className='aspect-video bg-gray-100 rounded-lg overflow-hidden'>
+                          <img
+                            src={URL.createObjectURL(selectedFiles[0])}
+                            alt='Cover preview'
+                            className='w-full h-full object-cover'
+                          />
+                        </div>
                       )}
                     </div>
-
-                    {/* Preview */}
-                    {imageUrl && (
-                      <div className='aspect-video bg-gray-100 rounded-lg overflow-hidden'>
-                        <img
-                          src={imageUrl}
-                          alt='Cover preview'
-                          className='w-full h-full object-cover'
-                        />
-                      </div>
-                    )}
-
-                    {selectedFiles.length > 0 && (
-                      <div className='aspect-video bg-gray-100 rounded-lg overflow-hidden'>
-                        <img
-                          src={URL.createObjectURL(selectedFiles[0])}
-                          alt='Cover preview'
-                          className='w-full h-full object-cover'
-                        />
-                      </div>
-                    )}
-                  </div>
 
                   <div className='grid grid-cols-2 gap-2'>
                     <div className='flex items-center space-x-2'>
@@ -614,7 +562,6 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
                 </CardContent>
               </Card>
 
-              {/* Images additionnelles */}
               <Card>
                 <CardContent className='p-4'>
                   <h3 className='font-semibold mb-3'>Images additionnelles</h3>
@@ -623,8 +570,49 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
                       type='file'
                       accept='image/*'
                       multiple
-                      onChange={handleAdditionalImagesUpload}
+                      onChange={(e) => {
+                        const files = e.target.files
+                        if (files) {
+                          const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
+                          const maxSize = 5 * 1024 * 1024
+                          const newImages = Array.from(files).map((file) => ({
+                            file,
+                            url: URL.createObjectURL(file),
+                            name: file.name,
+                            _isInvalid: !allowedTypes.includes(file.type) || file.size > maxSize,
+                          }))
+                          const invalidCount = newImages.filter((img) => img._isInvalid).length
+                          const validImages = newImages
+                            .filter((img) => !img._isInvalid)
+                            .map(({ file, url, name }) => ({ file, url, name }))
+
+                          const additionalFromSelected = selectedFiles.length > 1 ? selectedFiles.length - 1 : 0
+                          const remainingSlots = Math.max(5 - (additionalImages.length + additionalFromSelected), 0)
+                          const imagesToAdd = validImages.slice(0, remainingSlots)
+
+                          setAdditionalImages((prev) => [...prev, ...imagesToAdd])
+
+                          setErrors((prev) => {
+                            const next: any = { ...prev }
+                            if (invalidCount > 0) {
+                              next.additionalImages = `${invalidCount} image(s) invalide(s). Formats autorisés: jpg, png, webp. Taille max: 5 Mo.`
+                            } else {
+                              delete next.additionalImages
+                            }
+                            if (validImages.length > imagesToAdd.length) {
+                              next.additionalImages = 'Maximum 5 images additionnelles autorisées'
+                            }
+                            return next
+                          })
+                        }
+                      }}
                     />
+                    {errors.additionalImages && (
+                      <div className='flex items-center gap-1 text-red-500 text-sm mt-1'>
+                        <AlertCircle className='h-4 w-4' />
+                        <span>{errors.additionalImages}</span>
+                      </div>
+                    )}
 
                     {additionalImages.length > 0 && (
                       <div className='grid grid-cols-2 gap-2'>
@@ -652,10 +640,8 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
               </Card>
             </div>
 
-            {/* Main content area */}
             <div className='lg:col-span-2 space-y-4 order-1 lg:order-2'>
               <div className='space-y-4'>
-                {/* Contenu avec ReactQuill */}
                 <div className='space-y-2'>
                   <Label>Contenu de l'article *</Label>
                   <div
@@ -686,12 +672,11 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
           </div>
         </div>
 
-        {/* Footer actions */}
         <div className='p-4 sm:p-6 border-t bg-gray-50'>
           <div className='flex flex-col sm:flex-row gap-3 sm:gap-4'>
             <Button
               variant='outline'
-              onClick={onClose}
+              onClick={requestClose}
               disabled={loading}
               className='order-4 sm:order-1 w-full sm:w-auto'
             >
@@ -711,7 +696,7 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
               <Button
                 variant='outline'
                 onClick={() => handleSave(true)}
-                disabled={loading}
+                disabled={loading || !canSubmit}
                 className='border-orange-200 text-orange-700 hover:bg-orange-50 w-full sm:w-auto order-2 sm:order-2'
               >
                 {loading ? (
@@ -733,7 +718,7 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
 
               <Button
                 onClick={() => handleSave(false)}
-                disabled={loading}
+                disabled={loading || !canSubmit}
                 className='bg-primary hover:bg-primary-hover w-full sm:w-auto order-1 sm:order-3'
               >
                 {loading ? (

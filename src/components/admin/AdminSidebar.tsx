@@ -10,7 +10,6 @@ import {
   CreditCard,
   LogOut,
   Bell,
-  BarChart3,
   Settings,
   Shield,
   Wallet,
@@ -41,12 +40,7 @@ const AdminSidebar = ({ onItemClick }: AdminSidebarProps) => {
       end: true,
       permission: null,
     },
-    {
-      title: 'Analytiques',
-      icon: BarChart3,
-      href: '/admin/analytics',
-      permission: 'view_analytics',
-    },
+    // Removed separate "Analytiques" entry to unify under Dashboard
   ]
 
   // User & Content Management

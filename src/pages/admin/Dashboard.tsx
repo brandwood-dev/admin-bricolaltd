@@ -3,7 +3,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { DateRangePicker } from "@/components/ui/date-range-picker";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Users, Package, Calendar, AlertTriangle, TrendingUp, DollarSign, FileText, Filter } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Users, Package, Calendar, AlertTriangle, TrendingUp, TrendingDown, DollarSign, FileText, Filter, BarChart3, PieChart, RefreshCw, Download } from "lucide-react";
 import { DateRange } from "react-day-picker";
 import { 
   ChartContainer, 
@@ -12,18 +14,29 @@ import {
   ChartLegend,
   ChartLegendContent 
 } from "@/components/ui/chart";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, PieChart, Pie, Cell, ResponsiveContainer } from "recharts";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, PieChart as RechartsPieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, AreaChart, Area } from "recharts";
 import { dashboardService, DashboardData } from "@/services/dashboardService";
+import { analyticsService, AnalyticsData } from "@/services/analyticsService";
+import { toolsService, ToolStats } from "@/services/toolsService";
+import { disputesService } from "@/services/disputesService";
+import { newsService } from "@/services/newsService";
 import { useToast } from "@/hooks/use-toast";
 
 const Dashboard = () => {
+  // Existing Dashboard state
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
-  const [selectedMetric, setSelectedMetric] = useState<string>('reservations');
-  const [selectedYear, setSelectedYear] = useState<string>('2025');
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
+  // New unified analytics state
+  const [selectedPeriod, setSelectedPeriod] = useState<string>('30d');
+  const [analyticsLoading, setAnalyticsLoading] = useState(true);
+  const [analyticsData, setAnalyticsData] = useState<AnalyticsData | null>(null);
+  const [toolStats, setToolStats] = useState<ToolStats | null>(null);
+  const [totalArticles, setTotalArticles] = useState<number>(0);
+  const [totalDisputes, setTotalDisputes] = useState<number>(0);
   const { toast } = useToast();
 
+  // Fetch classic dashboard data (kept for compatibility)
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
@@ -32,367 +45,442 @@ const Dashboard = () => {
           start_date: dateRange.from?.toISOString().split('T')[0] || '',
           end_date: dateRange.to?.toISOString().split('T')[0] || ''
         } : undefined;
-        
         const response = await dashboardService.getDashboardData(dateRangeParams);
-        
         if (response.success) {
           setDashboardData(response.data);
         } else {
-          toast({
-            title: "Error",
-            description: "Failed to load dashboard data",
-            variant: "destructive"
-          });
+          toast({ title: "Erreur", description: "Impossible de charger les données du dashboard", variant: "destructive" });
         }
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
-        toast({
-          title: "Error",
-          description: "Failed to load dashboard data",
-          variant: "destructive"
-        });
+        toast({ title: "Erreur", description: "Impossible de charger les données du dashboard", variant: "destructive" });
       } finally {
         setLoading(false);
       }
     };
-
     fetchDashboardData();
   }, [dateRange, toast]);
 
-  // Use real data from API instead of mock data
-  const stats = dashboardData && dashboardData.stats ? [
+  // Fetch analytics + counts for unified KPIs and charts
+  useEffect(() => {
+    const fetchUnifiedData = async () => {
+      try {
+        setAnalyticsLoading(true);
+        const dateRangeParams = dateRange ? {
+          start_date: dateRange.from?.toISOString().split('T')[0] || '',
+          end_date: dateRange.to?.toISOString().split('T')[0] || ''
+        } : {};
+        const analyticsResp = await analyticsService.getAnalyticsData({ ...dateRangeParams, period: selectedPeriod });
+        if (analyticsResp.success) {
+          setAnalyticsData(analyticsResp.data);
+        }
+        const toolsResp = await toolsService.getToolStats();
+        setToolStats(toolsResp.data);
+        const disputesResp = await disputesService.getDisputeStats(dateRange ? {
+          startDate: dateRange.from?.toISOString().split('T')[0] || '',
+          endDate: dateRange.to?.toISOString().split('T')[0] || ''
+        } : undefined);
+        setTotalDisputes(disputesResp.data?.totalDisputes || 0);
+        const newsResp = await newsService.getNews({ isPublic: true, page: 1, limit: 1 });
+        setTotalArticles(newsResp.data.total || newsResp.data.meta?.total || 0);
+      } catch (error) {
+        console.error('Error fetching unified analytics:', error);
+        toast({ title: "Erreur", description: "Impossible de charger les analytiques", variant: "destructive" });
+      } finally {
+        setAnalyticsLoading(false);
+      }
+    };
+    fetchUnifiedData();
+  }, [dateRange, selectedPeriod, toast]);
+
+  const handleRefresh = async () => {
+    setAnalyticsLoading(true);
+    try {
+      const dateRangeParams = dateRange ? {
+        start_date: dateRange.from?.toISOString().split('T')[0] || '',
+        end_date: dateRange.to?.toISOString().split('T')[0] || ''
+      } : {};
+      const response = await analyticsService.getAnalyticsData({ ...dateRangeParams, period: selectedPeriod });
+      if (response.success) {
+        setAnalyticsData(response.data);
+        toast({ title: "Données actualisées", description: "Les analytics ont été mises à jour avec succès." });
+      }
+    } catch (error) {
+      console.error('Error refreshing analytics:', error);
+      toast({ title: "Erreur", description: "Impossible d'actualiser les données.", variant: "destructive" });
+    } finally {
+      setAnalyticsLoading(false);
+    }
+  };
+
+  const handleExport = async () => {
+    try {
+      toast({ title: "Export en cours", description: "Le rapport sera téléchargé dans quelques instants." });
+      const response = await analyticsService.exportAnalyticsReport('revenue', 'csv', dateRange ? {
+        startDate: dateRange.from?.toISOString().split('T')[0] || '',
+        endDate: dateRange.to?.toISOString().split('T')[0] || ''
+      } : undefined);
+      if (response.success && response.data) {
+        const url = window.URL.createObjectURL(response.data);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = `analytics-report-${new Date().toISOString().split('T')[0]}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        toast({ title: "Export réussi", description: "Le rapport a été téléchargé avec succès." });
+      }
+    } catch (error) {
+      console.error('Error exporting analytics:', error);
+      toast({ title: "Erreur d'export", description: "Impossible d'exporter le rapport.", variant: "destructive" });
+    }
+  };
+
+  // Unified KPI cards
+  const kpiCards = analyticsData ? [
     {
-      title: "Utilisateurs actifs",
-      value: dashboardData.stats.active_users.toLocaleString(),
-      change: `+${dashboardData.stats.growth_percentage}%`,
-      changeType: "positive" as const,
+      title: "Revenus totaux",
+      value: `€${analyticsData.kpis.total_revenue.toLocaleString()}`,
+      change: `+${analyticsData.kpis.revenue_growth}%`,
+      changeType: analyticsData.kpis.revenue_growth >= 0 ? "positive" as const : "negative" as const,
+      icon: DollarSign,
+      color: "bg-green-500"
+    },
+    {
+      title: "Total utilisateurs",
+      value: (analyticsData.kpis.active_users || 0).toLocaleString(),
+      change: `+${analyticsData.kpis.user_growth}%`,
+      changeType: analyticsData.kpis.user_growth >= 0 ? "positive" as const : "negative" as const,
       icon: Users,
       color: "bg-blue-500"
     },
     {
-      title: "Annonces en ligne",
-      value: dashboardData.stats.online_listings.toLocaleString(),
-      change: "+8%",
-      changeType: "positive" as const,
+      title: "Total annonces",
+      value: (toolStats?.total || analyticsData.kpis.active_tools || 0).toLocaleString(),
+      change: `${(analyticsData.kpis.tool_growth >= 0 ? '+' : '')}${analyticsData.kpis.tool_growth}%`,
+      changeType: analyticsData.kpis.tool_growth >= 0 ? "positive" as const : "negative" as const,
       icon: Package,
-      color: "bg-primary"
+      color: "bg-orange-500"
     },
     {
-      title: "Réservations actives",
-      value: dashboardData.stats.active_reservations.toLocaleString(),
-      change: "+15%",
-      changeType: "positive" as const,
+      title: "Total réservations",
+      value: (analyticsData.kpis.total_bookings || 0).toLocaleString(),
+      change: `+${analyticsData.kpis.booking_growth}%`,
+      changeType: analyticsData.kpis.booking_growth >= 0 ? "positive" as const : "negative" as const,
       icon: Calendar,
-      color: "bg-green-500"
+      color: "bg-purple-500"
     },
     {
-      title: "Litiges en cours",
-      value: dashboardData.stats.pending_disputes.toString(),
-      change: "-4%",
-      changeType: "negative" as const,
+      title: "Total litiges",
+      value: (totalDisputes || 0).toString(),
+      change: "",
+      changeType: "positive" as const,
       icon: AlertTriangle,
       color: "bg-red-500"
     },
     {
-      title: "Revenus du mois",
-      value: `€${dashboardData.stats.monthly_revenue.toLocaleString()}`,
-      change: "+18%",
+      title: "Total articles publiés",
+      value: (totalArticles || 0).toString(),
+      change: "",
       changeType: "positive" as const,
-      icon: DollarSign,
-      color: "bg-purple-500"
-    },
-    {
-      title: "Croissance",
-      value: `${dashboardData.stats.growth_percentage}%`,
-      change: "+5%",
-      changeType: "positive" as const,
-      icon: TrendingUp,
+      icon: FileText,
       color: "bg-indigo-500"
     }
   ] : [];
 
-  // Use chart data from API
-  const monthlyData = dashboardData?.chart_data || [];
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
-
-  // Configuration du graphique
-  const chartConfig = {
-    reservations: {
-      label: "Réservations",
-      color: "hsl(var(--chart-1))"
-    },
-    revenue: {
-      label: "Chiffre d'affaires (€)",
-      color: "hsl(var(--chart-2))"
-    },
-    users: {
-      label: "Utilisateurs",
-      color: "hsl(var(--chart-3))"
-    },
-    listings: {
-      label: "Annonces",
-      color: "hsl(var(--chart-4))"
-    }
-  };
-
-  // Données pour le graphique circulaire des pays - multicolore
-  const countryData = [
-    { name: "France", value: 45, color: "#8884d8" },
-    { name: "Belgique", value: 25, color: "#82ca9d" },
-    { name: "Suisse", value: 15, color: "#ffc658" },
-    { name: "Canada", value: 10, color: "#ff7300" },
-    { name: "Autres", value: 5, color: "#0088fe" }
-  ];
-
-  const recentActivities = [
-    {
-      type: "Nouvel utilisateur",
-      description: "Marie Dubois s'est inscrite",
-      time: "Il y a 5 minutes",
-      status: "success"
-    },
-    {
-      type: "Nouvelle annonce",
-      description: "Perceuse électrique publiée par Jean Martin",
-      time: "Il y a 15 minutes",
-      status: "info"
-    },
-    {
-      type: "Litige créé",
-      description: "Problème signalé pour la réservation #1234",
-      time: "Il y a 30 minutes",
-      status: "warning"
-    },
-    {
-      type: "Réservation confirmée",
-      description: "Location d'une scie circulaire validée",
-      time: "Il y a 1 heure",
-      status: "success"
-    }
-  ];
+  // Charts data from analytics
+  const revenueData = analyticsData?.charts.revenue || [];
+  const categoryData = analyticsData?.charts.categories || [];
+  const userGrowthData = analyticsData?.charts.user_growth || [];
+  const topToolsData = analyticsData?.charts.top_tools || [];
+  // Colors for category charts
+  const CATEGORY_COLORS = ['#8884d8', '#82ca9d', '#ffc658', '#ff8042', '#8dd1e1', '#a4de6c', '#d0ed57', '#d88884'];
 
   return (
-    <div className="space-y-6 p-1">{/* Force rebuild */}
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+    <div className="space-y-6">
+      {/* Header with unified filters */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-          <p className="text-gray-600 mt-2">Vue d'ensemble de votre plateforme</p>
+          <p className="text-gray-600 mt-1">Vue d'ensemble des performances et statistiques</p>
         </div>
-        <div className="flex items-center gap-2">
-          <Filter className="h-4 w-4 text-gray-500" />
-          <DateRangePicker
-            date={dateRange}
-            onDateChange={setDateRange}
-            placeholder="Filtrer par période"
-          />
+        <div className="flex items-center gap-3">
+          <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
+            <SelectTrigger className="w-32">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="7d">7 jours</SelectItem>
+              <SelectItem value="30d">30 jours</SelectItem>
+              <SelectItem value="90d">90 jours</SelectItem>
+              <SelectItem value="1y">1 an</SelectItem>
+            </SelectContent>
+          </Select>
+          <DateRangePicker date={dateRange} onDateChange={setDateRange} />
+          <Button variant="outline" size="sm" onClick={handleRefresh} disabled={analyticsLoading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${analyticsLoading ? 'animate-spin' : ''}`} />
+            Actualiser
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleExport}>
+            <Download className="h-4 w-4 mr-2" />
+            Exporter
+          </Button>
         </div>
       </div>
 
-      {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {stats.map((stat, index) => (
-          <Card key={index} className="hover:shadow-hover transition-shadow duration-300">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-600">{stat.title}</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-2">{stat.value}</p>
-                  <div className="flex items-center mt-2">
-                    <Badge 
-                      variant={stat.changeType === 'positive' ? 'default' : 'destructive'}
-                      className="text-xs"
-                    >
-                      {stat.change}
-                    </Badge>
-                    <span className="text-xs text-gray-500 ml-2">vs mois dernier</span>
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 gap-6">
+        {(analyticsLoading && kpiCards.length === 0) ? (
+          Array.from({ length: 6 }).map((_, index) => (
+            <Card key={index} className="animate-pulse">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-2">
+                    <div className="h-4 bg-gray-200 rounded w-24"></div>
+                    <div className="h-8 bg-gray-200 rounded w-16"></div>
+                    <div className="h-3 bg-gray-200 rounded w-20"></div>
                   </div>
+                  <div className="h-12 w-12 bg-gray-200 rounded"></div>
                 </div>
-                <div className={`p-3 rounded-lg ${stat.color}`}>
-                  <stat.icon className="h-6 w-6 text-white" />
-                </div>
+              </CardContent>
+            </Card>
+          ))
+        ) : (
+          kpiCards.map((kpi, index) => {
+            const Icon = kpi.icon;
+            return (
+              <Card key={index} className="hover:shadow-lg transition-shadow">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-gray-600">{kpi.title}</p>
+                      <p className="text-2xl font-bold text-gray-900 mt-1">{kpi.value}</p>
+                      <div className="flex items-center mt-2">
+                        {kpi.change && (
+                          kpi.changeType === 'positive' ? (
+                            <TrendingUp className="h-4 w-4 text-green-500 mr-1" />
+                          ) : (
+                            <TrendingDown className="h-4 w-4 text-red-500 mr-1" />
+                          )
+                        )}
+                        {kpi.change && (
+                          <span className={`text-sm font-medium ${
+                            kpi.changeType === 'positive' ? 'text-green-600' : 'text-red-600'
+                          }`}>
+                            {kpi.change}
+                          </span>
+                        )}
+                        {kpi.change && (
+                          <span className="text-sm text-gray-500 ml-1">vs période précédente</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className={`p-3 rounded-full ${kpi.color}`}>
+                      <Icon className="h-6 w-6 text-white" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })
+        )}
+      </div>
+
+      {/* Analytics Tabs (Revenue, Users, Tools, Performance) */}
+      <Tabs defaultValue="revenue" className="space-y-6">
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="revenue">Revenus</TabsTrigger>
+          <TabsTrigger value="users">Utilisateurs</TabsTrigger>
+          <TabsTrigger value="tools">Outils</TabsTrigger>
+        </TabsList>
+
+        {/* Revenue Analytics */}
+        <TabsContent value="revenue" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart3 className="h-5 w-5" />
+                  Évolution des revenus
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ChartContainer config={{ revenue: { label: "Revenus", color: "hsl(var(--chart-1))" } }} className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={revenueData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" />
+                      <YAxis />
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                      <Area type="monotone" dataKey="revenue" stroke="#8884d8" fill="#8884d8" fillOpacity={0.3} />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </ChartContainer>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <PieChart className="h-5 w-5" />
+                  Revenus par catégorie
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ChartContainer config={{ category: { label: "Catégorie" } }} className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RechartsPieChart>
+                      <Pie 
+                        data={categoryData} 
+                        cx="50%" 
+                        cy="50%" 
+                        labelLine={false} 
+                        label={({ payload }) => `${payload.category} ${Math.round(payload.percentage)}%`} 
+                        outerRadius={80} 
+                        dataKey="count"
+                      >
+                        {categoryData.map((entry: any, index: number) => (
+                          <Cell key={`cell-${index}`} fill={CATEGORY_COLORS[index % CATEGORY_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                    </RechartsPieChart>
+                  </ResponsiveContainer>
+                </ChartContainer>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Top 5 des outils les plus rentables</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {topToolsData.map((tool, index) => (
+                  <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white font-bold text-sm">{index + 1}</div>
+                      <div>
+                        <p className="font-medium">{tool.title}</p>
+                        <p className="text-sm text-gray-600">{tool.bookings} réservations</p>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-green-600">€{tool.revenue}</p>
+                      <p className="text-sm text-gray-600">revenus</p>
+                    </div>
+                  </div>
+                ))}
               </div>
             </CardContent>
           </Card>
-        ))}
-      </div>
+        </TabsContent>
 
-      {/* Analytics Charts */}
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 mb-6">
-        {/* Graphique en courbe - Évolution mensuelle */}
-        <Card className="xl:col-span-2">
-          <CardHeader>
-            <CardTitle className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              <span>Évolution mensuelle des indicateurs</span>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <Select value={selectedYear} onValueChange={setSelectedYear}>
-                  <SelectTrigger className="w-[120px]">
-                    <SelectValue placeholder="Année" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="2025">2025</SelectItem>
-                    <SelectItem value="2024">2024</SelectItem>
-                    <SelectItem value="2023">2023</SelectItem>
-                  </SelectContent>
-                </Select>
-                <Select value={selectedMetric} onValueChange={setSelectedMetric}>
-                  <SelectTrigger className="w-[180px]">
-                    <SelectValue placeholder="Indicateur" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {Object.entries(chartConfig).map(([key, config]) => (
-                      <SelectItem key={key} value={key}>
-                        {config.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ChartContainer config={chartConfig} className="h-[350px] w-full">
-              <LineChart data={monthlyData}>
-                <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-                <XAxis 
-                  dataKey="month" 
-                  axisLine={false}
-                  tickLine={false}
-                  className="text-xs"
-                />
-                <YAxis 
-                  axisLine={false}
-                  tickLine={false}
-                  className="text-xs"
-                />
-                <ChartTooltip 
-                  content={<ChartTooltipContent />}
-                  cursor={{ strokeDasharray: "5 5" }}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey={selectedMetric}
-                  stroke={chartConfig[selectedMetric as keyof typeof chartConfig]?.color}
-                  strokeWidth={3}
-                  dot={false}
-                  activeDot={{ r: 6, strokeWidth: 2 }}
-                />
-              </LineChart>
-            </ChartContainer>
-          </CardContent>
-        </Card>
+        {/* User Analytics */}
+        <TabsContent value="users" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  Croissance des utilisateurs
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ChartContainer config={{ newUsers: { label: "Nouveaux utilisateurs", color: "hsl(var(--chart-1))" }, totalUsers: { label: "Total utilisateurs", color: "hsl(var(--chart-2))" } }} className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={userGrowthData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="date" />
+                      <YAxis />
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                      <ChartLegend content={<ChartLegendContent />} />
+                      <Line type="monotone" dataKey="newUsers" stroke="#8884d8" strokeWidth={2} />
+                      <Line type="monotone" dataKey="totalUsers" stroke="#82ca9d" strokeWidth={2} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </ChartContainer>
+              </CardContent>
+            </Card>
 
-        {/* Graphique circulaire - Répartition par pays */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Répartition des utilisateurs par pays</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ChartContainer config={{}} className="h-[250px] w-full">
-              <PieChart>
-                <Pie
-                  data={countryData}
-                  cx="50%"
-                  cy="50%"
-                  labelLine={false}
-                  label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                  outerRadius={80}
-                  fill="#8884d8"
-                  dataKey="value"
-                >
-                  {countryData.map((entry, index) => (
-                    <Cell key={`cell-${index}`} fill={entry.color} />
-                  ))}
-                </Pie>
-                <ChartTooltip 
-                  content={({ active, payload }) => {
-                    if (active && payload && payload.length) {
-                      const data = payload[0].payload;
-                      return (
-                        <div className="rounded-lg border bg-background p-2 shadow-sm">
-                          <div className="grid grid-cols-2 gap-2">
-                            <div className="flex flex-col">
-                              <span className="text-[0.70rem] uppercase text-muted-foreground">
-                                {data.name}
-                              </span>
-                              <span className="font-bold text-muted-foreground">
-                                {data.value}%
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    }
-                    return null;
-                  }}
-                />
-              </PieChart>
-            </ChartContainer>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Charts and Activities */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Activities */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Activités récentes</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {recentActivities.map((activity, index) => (
-                <div key={index} className="flex items-start space-x-3 p-3 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
-                  <div className={`h-2 w-2 rounded-full mt-2 ${
-                    activity.status === 'success' ? 'bg-green-500' :
-                    activity.status === 'warning' ? 'bg-yellow-500' :
-                    activity.status === 'info' ? 'bg-blue-500' : 'bg-gray-500'
-                  }`} />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900">{activity.type}</p>
-                    <p className="text-sm text-gray-600">{activity.description}</p>
-                    <p className="text-xs text-gray-500 mt-1">{activity.time}</p>
+            <Card>
+              <CardHeader>
+                <CardTitle>Statistiques utilisateurs</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-6">
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="text-center p-4 bg-blue-50 rounded-lg">
+                      <p className="text-2xl font-bold text-blue-600">{(analyticsData?.kpis.active_users || 0).toLocaleString()}</p>
+                      <p className="text-sm text-gray-600">Utilisateurs totaux</p>
+                    </div>
+                    <div className="text-center p-4 bg-green-50 rounded-lg">
+                      <p className="text-2xl font-bold text-green-600">{userGrowthData.reduce((sum, u) => sum + (u.newUsers || 0), 0)}</p>
+                      <p className="text-sm text-gray-600">Nouveaux ce période</p>
+                    </div>
                   </div>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
 
-        {/* Quick Actions */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Actions rapides</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-4 border-2 border-dashed border-gray-300 rounded-lg text-center hover:border-primary hover:bg-primary-light transition-colors cursor-pointer">
-                <Users className="h-8 w-8 mx-auto text-gray-400 mb-2" />
-                <p className="text-sm font-medium">Gérer utilisateurs</p>
-              </div>
-              <div className="p-4 border-2 border-dashed border-gray-300 rounded-lg text-center hover:border-primary hover:bg-primary-light transition-colors cursor-pointer">
-                <Package className="h-8 w-8 mx-auto text-gray-400 mb-2" />
-                <p className="text-sm font-medium">Modérer annonces</p>
-              </div>
-              <div className="p-4 border-2 border-dashed border-gray-300 rounded-lg text-center hover:border-primary hover:bg-primary-light transition-colors cursor-pointer">
-                <AlertTriangle className="h-8 w-8 mx-auto text-gray-400 mb-2" />
-                <p className="text-sm font-medium">Traiter litiges</p>
-              </div>
-              <div className="p-4 border-2 border-dashed border-gray-300 rounded-lg text-center hover:border-primary hover:bg-primary-light transition-colors cursor-pointer">
-                <FileText className="h-8 w-8 mx-auto text-gray-400 mb-2" />
-                <p className="text-sm font-medium">Créer article</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+        {/* Tools Analytics */}
+        <TabsContent value="tools" className="space-y-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Package className="h-5 w-5" />
+                  Répartition des outils par catégorie
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ChartContainer config={{ tools: { label: "Outils" } }} className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={categoryData}>
+                      <CartesianGrid strokeDasharray="3 3" />
+                      <XAxis dataKey="category" />
+                      <YAxis />
+                      <ChartTooltip content={<ChartTooltipContent />} />
+                      <Bar dataKey="count" fill="#8884d8" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </ChartContainer>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Outils les plus performants</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {topToolsData.map((tool, index) => (
+                    <div key={index} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center text-white font-bold text-sm">{index + 1}</div>
+                        <div>
+                          <p className="font-medium">{tool.title}</p>
+                          <p className="text-sm text-gray-600">{tool.bookings} réservations</p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-bold text-green-600">€{tool.revenue}</p>
+                        <p className="text-sm text-gray-600">revenus</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+
+      </Tabs>
     </div>
   );
 };

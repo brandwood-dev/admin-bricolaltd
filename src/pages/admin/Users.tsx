@@ -106,10 +106,26 @@ import {
   UserActivity,
 } from '@/types/unified-bridge'
 
+// Mapping des codes pays vers noms complets
+const COUNTRY_MAP = {
+  SA: 'Arabie Saoudite',
+  BH: 'Bahreïn',
+  KW: 'Koweït',
+  OM: 'Oman',
+  QA: 'Qatar',
+  AE: 'Émirats Arabes Unis',
+} as const
+
+const getCountryName = (countryId?: string) => {
+  if (!countryId) return undefined
+  const code = countryId.trim().toUpperCase()
+  return (COUNTRY_MAP as Record<string, string>)[code]
+}
+
 const Users = () => {
   const [searchTerm, setSearchTerm] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [verifiedFilter, setVerifiedFilter] = useState('all')
+  const [countryFilter, setCountryFilter] = useState('all')
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined)
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -134,7 +150,7 @@ const Users = () => {
       // Map frontend filters to API parameters according to UserFilterParams interface
       const params: UserFilterParams = {
         page,
-        limit: 10, // Fixed to 10 users per page
+        limit: pageSize,
         search: searchTerm || undefined,
         // Map status filter to isActive boolean
         isActive:
@@ -145,15 +161,11 @@ const Users = () => {
             : filters?.status === 'suspended'
             ? false
             : undefined,
-        // Map verified filter to verifiedEmail boolean
-        verifiedEmail:
-          filters?.verified === 'all'
+        // Map country filter to country name
+        country:
+          filters?.country === 'all'
             ? undefined
-            : filters?.verified === 'verified'
-            ? true
-            : filters?.verified === 'unverified'
-            ? false
-            : undefined,
+            : filters?.country,
         // Map date range to startDate/endDate
         startDate: filters?.dateFrom,
         endDate: filters?.dateTo,
@@ -192,7 +204,7 @@ const Users = () => {
           data: usersData,
           pagination: {
             page: currentPage,
-            pageSize: 10, // Fixed to 10
+            pageSize: pageSize,
             total: total,
             totalPages: totalPages,
           },
@@ -211,13 +223,13 @@ const Users = () => {
     {
       search: searchTerm,
       status: statusFilter,
-      verified: verifiedFilter,
+      country: countryFilter,
       dateFrom: dateRange?.from?.toISOString(),
       dateTo: dateRange?.to?.toISOString(),
     },
     {
       initialPage: 1,
-      initialPageSize: 10,
+      initialPageSize: 50,
       prefetchNext: true,
     }
   )
@@ -232,9 +244,9 @@ const Users = () => {
   const refreshUsers = pagination.refresh
 
   // Ensure proper fallback values for pagination data
-  const totalUsers = pagination.pagination?.totalItems || 0
-  const totalPages = pagination.pagination?.totalPages || 0
-  const currentPage = pagination.pagination?.currentPage || 1
+  const totalUsers = pagination.pagination?.totalItems ?? pagination.pagination?.total ?? 0
+  const totalPages = pagination.pagination?.totalPages ?? Math.max(1, Math.ceil(totalUsers / (pagination.pagination?.pageSize ?? pagination.pageSize ?? 10)))
+  const currentPage = pagination.pagination?.currentPage ?? pagination.pagination?.page ?? pagination.currentPage ?? 1
 
   // Debug logs for pagination data
   console.log('Pagination debug:', {
@@ -315,7 +327,7 @@ const Users = () => {
     console.log('🔍 [SEARCH DEBUG] Search filters changed:', {
       searchTerm,
       statusFilter,
-      verifiedFilter,
+      countryFilter,
       dateRange: {
         from: dateRange?.from?.toISOString(),
         to: dateRange?.to?.toISOString()
@@ -327,7 +339,7 @@ const Users = () => {
       console.log('🔍 [SEARCH DEBUG] Current filters being applied:', {
         searchTerm,
         statusFilter,
-        verifiedFilter,
+        countryFilter,
         dateRange,
       })
       console.log('🔍 [SEARCH DEBUG] About to call pagination.refresh()')
@@ -335,7 +347,7 @@ const Users = () => {
     }, 500) // 500ms debounce for search
 
     return () => clearTimeout(timeoutId)
-  }, [searchTerm, statusFilter, verifiedFilter, dateRange])
+  }, [searchTerm, statusFilter, countryFilter, dateRange])
 
   // Handle pagination changes
   const handlePageChange = (page: number) => {
@@ -566,8 +578,8 @@ const Users = () => {
             : statusFilter === 'suspended'
             ? false
             : undefined,
-        verifiedEmail:
-          verifiedFilter !== 'all' ? verifiedFilter === 'verified' : undefined,
+        country:
+          countryFilter === 'all' ? undefined : countryFilter,
         startDate: dateRange?.from?.toISOString(),
         endDate: dateRange?.to?.toISOString(),
       }
@@ -786,9 +798,6 @@ const Users = () => {
                 <div className='flex items-center gap-2'>
                   <Mail className='h-4 w-4 text-gray-500' />
                   <span className='text-sm'>{currentUser.email}</span>
-                  {currentUser.verifiedEmail && (
-                    <CheckCircle className='h-4 w-4 text-green-500' />
-                  )}
                 </div>
                 {currentUser.phoneNumber && (
                   <div className='flex items-center gap-2'>
@@ -796,10 +805,10 @@ const Users = () => {
                     <span className='text-sm'>{currentUser.phoneNumber}</span>
                   </div>
                 )}
-                {currentUser.city && (
+                {currentUser.country?.name && (
                   <div className='flex items-center gap-2'>
                     <MapPin className='h-4 w-4 text-gray-500' />
-                    <span className='text-sm'>{currentUser.city}</span>
+                    <span className='text-sm'>{currentUser.country?.name}</span>
                   </div>
                 )}
                 <div className='flex items-center gap-2'>
@@ -834,16 +843,7 @@ const Users = () => {
                     </Button>
                   </div>
                 )}
-                <div className='flex items-center gap-2'>
-                  <span className='text-sm'>Vérifié:</span>
-                  {currentUser.isVerified ? (
-                    <Badge className='bg-success text-success-foreground'>
-                      ✓ Vérifié
-                    </Badge>
-                  ) : (
-                    <Badge variant='outline'>✗ Non vérifié</Badge>
-                  )}
-                </div>
+                {/* Removed email verification display */}
                 {currentUser.isAdmin && (
                   <div className='flex items-center gap-2'>
                     <Shield className='h-4 w-4 text-blue-500' />
@@ -1262,27 +1262,16 @@ const Users = () => {
 
           {/* Actions */}
           <div className='flex flex-wrap gap-2 pt-4 border-t'>
-            {!currentUser.verifiedEmail && (
-              <Button
-                variant='outline'
-                size='sm'
-                onClick={() =>
-                  handleUserActionLocal(() => handleVerifyUser(currentUser.id))
-                }
-              >
-                <CheckCircle className='h-4 w-4 mr-2' />
-                Vérifier
-              </Button>
-            )}
+            {/* Removed verify button */}
 
             {!currentUser.isSuspended && (
-              <div className='flex flex-col gap-3'>
+              <div className='flex flex-col md:flex-row gap-3 items-end md:items-center'>
                 <div className='space-y-2'>
                   <label className='text-sm font-medium text-gray-700'>
                     Raison de la suspension
                   </label>
                   <Select value={suspensionReason} onValueChange={setSuspensionReason}>
-                    <SelectTrigger className='w-full'>
+                    <SelectTrigger className='w-full md:w-64'>
                       <SelectValue placeholder='Sélectionnez une raison' />
                     </SelectTrigger>
                     <SelectContent>
@@ -1295,6 +1284,7 @@ const Users = () => {
                   </Select>
                 </div>
                 <Button
+                  className='md:self-end'
                   variant='destructive'
                   size='sm'
                   disabled={!suspensionReason}
@@ -1428,7 +1418,6 @@ const Users = () => {
                 placeholder='Rechercher par nom ou email...'
                 value={searchTerm}
                 onChange={(e) => {
-                  console.log('🔍 [SEARCH DEBUG] Search input changed:', e.target.value)
                   setSearchTerm(e.target.value)
                 }}
                 className='pl-10'
@@ -1445,14 +1434,18 @@ const Users = () => {
                 <SelectItem value='suspended'>Suspendu</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={verifiedFilter} onValueChange={setVerifiedFilter}>
+            <Select value={countryFilter} onValueChange={setCountryFilter}>
               <SelectTrigger>
-                <SelectValue placeholder='Vérification' />
+                <SelectValue placeholder='Pays' />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value='all'>Tous les emails</SelectItem>
-                <SelectItem value='verified'>Vérifiés</SelectItem>
-                <SelectItem value='unverified'>Non vérifiés</SelectItem>
+                <SelectItem value='all'>Tous les pays</SelectItem>
+                <SelectItem value='Koweït'>Koweït</SelectItem>
+                <SelectItem value='Arabie Saoudite'>Arabie Saoudite</SelectItem>
+                <SelectItem value='Bahreïn'>Bahreïn</SelectItem>
+                <SelectItem value='Oman'>Oman</SelectItem>
+                <SelectItem value='Qatar'>Qatar</SelectItem>
+                <SelectItem value='Émirats Arabes Unis'>Émirats Arabes Unis</SelectItem>
               </SelectContent>
             </Select>
             <DateRangePicker
@@ -1499,25 +1492,25 @@ const Users = () => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Utilisateur</TableHead>
-                  <TableHead className='hidden md:table-cell'>
-                    Téléphone
-                  </TableHead>
-                  <TableHead className='hidden lg:table-cell'>
-                    Localisation
-                  </TableHead>
-                  <TableHead>Statut</TableHead>
-                  <TableHead className='hidden md:table-cell'>
-                    Email Vérifié
-                  </TableHead>
-                  <TableHead className='hidden lg:table-cell'>
-                    Inscription
-                  </TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
+                   <TableHead>Utilisateur</TableHead>
+                   <TableHead className='hidden md:table-cell'>
+                     Téléphone
+                   </TableHead>
+                   <TableHead className='hidden lg:table-cell'>
+                     Pays
+                   </TableHead>
+                   <TableHead>Statut</TableHead>
+                   <TableHead className='hidden lg:table-cell'>
+                     Inscription
+                   </TableHead>
+                   <TableHead>Actions</TableHead>
+                 </TableRow>
               </TableHeader>
               <TableBody>
-                {users.map((user) => (
+                {/** debug log removed */}
+                {users
+                  .filter((user) => user.email !== 'admin@bricola.fr' && user.displayName !== 'Admin Bricola')
+                  .map((user) => (
                   <TableRow key={user.id}>
                     <TableCell>
                       <div className='flex items-center gap-3'>
@@ -1552,24 +1545,15 @@ const Users = () => {
                       </div>
                     </TableCell>
                     <TableCell className='hidden md:table-cell'>
-                      {user.phoneNumber || '-'}
+                      {(user as any).phoneNumber ?? (user as any).phone ?? '-'}
                     </TableCell>
                     <TableCell className='hidden lg:table-cell'>
-                      {user.city || '-'}
+                      {getCountryName((user as any).countryId) ?? ((user as any).country && (user as any).country.name) ?? (user as any).countryName ?? '-'}
                     </TableCell>
-                    <TableCell>{getStatusBadge(user)}</TableCell>
-                    <TableCell className='hidden md:table-cell'>
-                      {user.isVerified ? (
-                        <Badge className='bg-success text-success-foreground'>
-                          ✓ Vérifié
-                        </Badge>
-                      ) : (
-                        <Badge variant='outline'>✗ Non vérifié</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className='hidden lg:table-cell'>
-                      {new Date(user.createdAt).toLocaleDateString('fr-FR')}
-                    </TableCell>
+                     <TableCell>{getStatusBadge(user)}</TableCell>
+                     <TableCell className='hidden lg:table-cell'>
+                       {new Date(user.createdAt).toLocaleDateString('fr-FR')}
+                     </TableCell>
                     <TableCell>
                       <div className='flex items-center gap-2'>
                         <UserDetailsModal user={user} />
@@ -1593,15 +1577,16 @@ const Users = () => {
               <EnhancedPagination
                 pagination={{
                   currentPage: currentPage,
-                  pageSize: 10,
+                  pageSize: pagination.pageSize ?? 50,
                   totalItems: totalUsers,
                   totalPages: totalPages,
                   hasNextPage: currentPage < totalPages,
                   hasPreviousPage: currentPage > 1,
                 }}
                 onPageChange={handlePageChange}
+                onPageSizeChange={handlePageSizeChange}
                 onRefresh={handleRefresh}
-                showPageSize={false}
+                showPageSize={true}
                 showRefresh={true}
               />
             </div>

@@ -112,7 +112,7 @@ class TransactionsService {
   }
 
   async getTransactionsByUser(userId: string, params?: { page?: number; limit?: number }): Promise<ApiResponse<PaginatedResponse<Transaction>>> {
-    return await apiClient.get<PaginatedResponse<Transaction>>(`/admin/transactions/user/${userId}`, { params });
+    return await apiClient.get<PaginatedResponse<Transaction>>(`/users/${userId}/transactions`, { params });
   }
 
   async getTransactionsByBooking(bookingId: string): Promise<ApiResponse<Transaction[]>> {

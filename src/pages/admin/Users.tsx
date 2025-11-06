@@ -105,6 +105,7 @@ import {
   Transaction,
   UserActivity,
 } from '@/types/unified-bridge'
+import { transactionsService } from '@/services/transactionsService'
 
 // Mapping des codes pays vers noms complets
 const COUNTRY_MAP = {
@@ -384,8 +385,8 @@ const Users = () => {
       const [userResponse, transactionsResponse, activitiesResponse] =
         await Promise.all([
           userService.getUserById(userId),
-          userService.getUserTransactions(userId, { limit: 10 }),
-          userService.getUserActivities(userId, { limit: 10 }),
+          transactionsService.getTransactionsByUser(userId, { limit: 10 }),
+          userStatsService.getUserDetailedActivities(userId, { limit: 10 }),
         ])
 
       console.log('API responses:', {
@@ -670,8 +671,8 @@ const Users = () => {
         const [userResponse, transactionsResponse, activitiesResponse] =
           await Promise.all([
             userService.getUserById(user.id),
-            userService.getUserTransactions(user.id, { limit: 10 }),
-            userService.getUserActivities(user.id, { limit: 10 }),
+            transactionsService.getTransactionsByUser(user.id, { limit: 10 }),
+            userStatsService.getUserDetailedActivities(user.id, { limit: 10 }),
           ])
 
         console.log('API responses:', {
@@ -784,6 +785,9 @@ const Users = () => {
                 </div>
               )}
             </DialogTitle>
+            <DialogDescription className='text-sm text-gray-500'>
+              Détails complets de l'utilisateur avec ses transactions et activités
+            </DialogDescription>
           </DialogHeader>
 
           <div className='grid grid-cols-1 lg:grid-cols-2 gap-6'>

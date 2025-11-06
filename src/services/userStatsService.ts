@@ -89,10 +89,33 @@ class UserStatsService {
     userId: string, 
     params?: { page?: number; limit?: number; type?: string }
   ): Promise<ApiResponse<PaginatedResponse<UserDetailedActivity>>> {
-    return await apiClient.get<PaginatedResponse<UserDetailedActivity>>(
-      `/users/${userId}/detailed-activities`, 
-      { params }
-    );
+    // L'endpoint /users/:id/activities renvoie un tableau simple.
+    // On le normalise ici en structure paginée pour aligner avec le reste de l'admin.
+    const response = await apiClient.get<any>(`/users/${userId}/activities`, { params });
+    const payload = response?.data;
+
+    const activitiesArray: UserDetailedActivity[] = Array.isArray(payload?.data)
+      ? (payload.data as UserDetailedActivity[])
+      : Array.isArray(payload)
+        ? (payload as UserDetailedActivity[])
+        : [];
+
+    const page = typeof params?.page === 'number' ? params!.page! : 1;
+    const limit = typeof params?.limit === 'number' ? params!.limit! : (activitiesArray.length || 10);
+    const total = activitiesArray.length;
+    const totalPages = Math.max(1, Math.ceil(total / (limit || 1)));
+
+    return {
+      data: {
+        data: activitiesArray,
+        total,
+        page,
+        limit,
+        totalPages,
+      },
+      message: response.message,
+      success: response.success ?? true,
+    };
   }
 
   // Récupérer le nombre d'annonces d'un utilisateur

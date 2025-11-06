@@ -16,7 +16,6 @@ export interface News {
   title: string;
   content: string;
   imageUrl?: string;
-  additionalImages?: string[];
   isPublic: boolean;
   isFeatured: boolean;
   summary?: string;
@@ -36,19 +35,16 @@ export interface CreateNewsDto {
   title: string;
   content: string;
   imageUrl?: string;
-  additionalImages?: string[];
   isPublic?: boolean;
   isFeatured?: boolean;
   summary?: string;
   category?: string;
-  // Note: 'files' field is handled separately via FormData, not included in this DTO
 }
 
 export interface UpdateNewsDto {
   title?: string;
   content?: string;
   imageUrl?: string;
-  additionalImages?: string[];
   isPublic?: boolean;
   isFeatured?: boolean;
   summary?: string;
@@ -119,25 +115,29 @@ class NewsService {
     if (data.isFeatured !== undefined) formData.append('isFeatured', data.isFeatured.toString());
     if (data.summary) formData.append('summary', data.summary);
     if (data.category) formData.append('category', data.category);
-    if (data.additionalImages) {
-      data.additionalImages.forEach((url, index) => {
-        formData.append(`additionalImages[${index}]`, url);
-      });
-    }
     
-    // Add files (handled separately from data object)
+    // Append only the main image (first file) if provided
     if (files && files.length > 0) {
-      // Send first file as mainImage
-      formData.append('mainImage', files[0]);
-      
-      // Send additional files as additionalImages
-      if (files.length > 1) {
-        for (let i = 1; i < files.length; i++) {
-          formData.append('additionalImages', files[i]);
-        }
-      }
+      const main = files[0];
+      formData.append('mainImage', main);
     }
 
+    // Safety: ensure no 'files' field is included
+    if ((data as any)?.files) {
+      console.warn('[NewsService] data.files detected in payload, will NOT append this field.');
+    }
+    formData.delete('files');
+
+    const fdSnapshot: Array<{ key: string; type: string; size?: number; name?: string }> = [];
+    // @ts-ignore
+    for (const [k, v] of (formData as any).entries()) {
+      if (typeof File !== 'undefined' && v instanceof File) {
+        fdSnapshot.push({ key: k, type: 'File', size: v.size, name: v.name });
+      } else {
+        fdSnapshot.push({ key: k, type: 'String' });
+      }
+    }
+    
     console.log('📤 [NewsService] Envoi FormData avec:', {
       textFields: {
         title: data.title,
@@ -145,9 +145,10 @@ class NewsService {
         isPublic: data.isPublic,
         isFeatured: data.isFeatured,
         summary: data.summary,
-        category: data.category
+        category: data.category,
       },
-      filesCount: files?.length || 0
+      filesCount: files?.length || 0,
+      formDataKeys: fdSnapshot
     });
 
     return await apiClient.post<News>('/news', formData, {
@@ -169,32 +170,37 @@ class NewsService {
     if (data.isFeatured !== undefined) formData.append('isFeatured', data.isFeatured.toString());
     if (data.summary) formData.append('summary', data.summary);
     if (data.category) formData.append('category', data.category);
-    if (data.replaceMainImage !== undefined) formData.append('replaceMainImage', data.replaceMainImage.toString());
-    if (data.additionalImages) {
-      data.additionalImages.forEach((url, index) => {
-        formData.append(`additionalImages[${index}]`, url);
-      });
-    }
     
-    // Add files (handled separately from data object)
-    if (files && files.length > 0) {
-      // For updates, if replaceMainImage is true, send first file as mainImage
-      if (data.replaceMainImage) {
-        formData.append('mainImage', files[0]);
-        
-        // Send remaining files as additionalImages
-        if (files.length > 1) {
-          for (let i = 1; i < files.length; i++) {
-            formData.append('additionalImages', files[i]);
-          }
-        }
+    // Append only the main image (first file) if provided and replaceMainImage is true
+    if (files && files.length > 0 && data.replaceMainImage) {
+      const main = files[0];
+      formData.append('mainImage', main);
+    }
+
+    // NEW: Send the replaceMainImage flag to backend so DTO receives it
+    if (data.replaceMainImage !== undefined) {
+      formData.append('replaceMainImage', data.replaceMainImage ? 'true' : 'false');
+    }
+
+    // Safety: ensure no 'files' field is included on update
+    if ((data as any)?.files) {
+      console.warn('[NewsService] data.files detected during update, will NOT append this field.');
+    }
+    formData.delete('files');
+
+    const fdUpdateSnapshot: Array<{ key: string; type: string; size?: number; name?: string }> = [];
+    // @ts-ignore
+    for (const [k, v] of (formData as any).entries()) {
+      if (typeof File !== 'undefined' && v instanceof File) {
+        fdUpdateSnapshot.push({ key: k, type: 'File', size: v.size, name: v.name });
       } else {
-        // If not replacing main image, send all files as additionalImages
-        files.forEach((file) => {
-          formData.append('additionalImages', file);
-        });
+        fdUpdateSnapshot.push({ key: k, type: 'String' });
       }
     }
+
+    // NEW: Confirm replaceMainImage is present in FormData keys
+    const hasReplaceFlag = fdUpdateSnapshot.some((entry) => entry.key === 'replaceMainImage');
+    console.log('✅ [NewsService] replaceMainImage appended:', hasReplaceFlag, 'value:', data.replaceMainImage);
 
     console.log('📤 [NewsService] Mise à jour FormData avec:', {
       id,
@@ -207,7 +213,8 @@ class NewsService {
         category: data.category,
         replaceMainImage: data.replaceMainImage
       },
-      filesCount: files?.length || 0
+      filesCount: files?.length || 0,
+      formDataKeys: fdUpdateSnapshot
     });
 
     return await apiClient.patch<News>(`/news/${id}`, formData, {

@@ -89,6 +89,7 @@ import {
   DollarSign,
   Wallet,
 } from 'lucide-react'
+import { TransactionType } from '@/types/unified-bridge'
 import { useToast } from '@/hooks/use-toast'
 import { DateRange } from 'react-day-picker'
 import { userService, UserStats } from '@/services/userService'
@@ -162,7 +163,7 @@ const Users = () => {
             : filters?.status === 'suspended'
             ? false
             : undefined,
-        // Map country filter to country name
+        // Map country filter to ISO code or name (backend supports both)
         country:
           filters?.country === 'all'
             ? undefined
@@ -230,7 +231,7 @@ const Users = () => {
     },
     {
       initialPage: 1,
-      initialPageSize: 50,
+      initialPageSize: 10,
       prefetchNext: true,
     }
   )
@@ -453,7 +454,7 @@ const Users = () => {
       console.error('Error activating user:', error)
       toast({
         title: 'Erreur',
-        description: "Erreur lors de l'activation de l'utilisateur",
+        description: "Erreur l'activation de l'utilisateur",
         variant: 'destructive',
       })
     }
@@ -579,21 +580,56 @@ const Users = () => {
             : statusFilter === 'suspended'
             ? false
             : undefined,
-        country:
-          countryFilter === 'all' ? undefined : countryFilter,
-        startDate: dateRange?.from?.toISOString(),
-        endDate: dateRange?.to?.toISOString(),
+        country: countryFilter === 'all' ? undefined : countryFilter,
+        startDate: dateRange?.from?.toISOString()?.split('T')[0],
+        endDate: dateRange?.to?.toISOString()?.split('T')[0],
       }
 
+      // Primary: generate CSV with required columns from JSON list
+      const usersResponse = await userService.exportUsersList(filters)
+      const usersList = Array.isArray((usersResponse as any)?.data?.data)
+        ? (usersResponse as any).data.data
+        : []
+
+      if (usersList.length > 0) {
+        const escape = (value: any) => {
+          if (value === null || value === undefined) return ''
+          const str = String(value)
+          return /[",\n]/.test(str) ? `"${str.replace(/"/g, '""')}"` : str
+        }
+
+        const header = ['Nom', 'Prénom', 'Email', 'Téléphone', 'Pays', 'Statut']
+        const rows = usersList.map((u: any) => {
+          const countryName = u.country?.name || ''
+          const status = u.isSuspended ? 'Suspendu' : u.isActive ? 'Actif' : 'Inactif'
+          return [u.lastName || '', u.firstName || '', u.email || '', u.phoneNumber || '', countryName || '', status]
+        })
+
+        const csv = [header, ...rows]
+          .map((row) => row.map(escape).join(','))
+          .join('\n')
+
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' })
+        const url = window.URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.download = `users-export-${new Date().toISOString().split('T')[0]}.csv`
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+        window.URL.revokeObjectURL(url)
+
+        toast({ title: 'Succès', description: 'Export CSV des utilisateurs téléchargé' })
+        return
+      }
+
+      // Fallback: direct CSV from backend
       const response = await userService.exportUsersCSV(filters)
       if (response.success && response.data) {
-        // Create download link
         const url = window.URL.createObjectURL(response.data)
         const link = document.createElement('a')
         link.href = url
-        link.download = `users-export-${
-          new Date().toISOString().split('T')[0]
-        }.csv`
+        link.download = `users-export-${new Date().toISOString().split('T')[0]}.csv`
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
@@ -603,13 +639,14 @@ const Users = () => {
           title: 'Succès',
           description: 'Export CSV des utilisateurs téléchargé',
         })
-      } else {
-        toast({
-          title: 'Erreur',
-          description: "Impossible d'exporter les utilisateurs en CSV",
-          variant: 'destructive',
-        })
+        return
       }
+
+      toast({
+        title: 'Erreur',
+        description: "Impossible d'exporter les utilisateurs en CSV",
+        variant: 'destructive',
+      })
     } catch (error) {
       console.error('Error exporting users CSV:', error)
       toast({
@@ -751,20 +788,27 @@ const Users = () => {
                     alt={`${currentUser.firstName} ${currentUser.lastName}`}
                     className='w-full h-full object-cover'
                     onLoad={() => {
-                      console.log('✅ Photo de profil chargée avec succès:', currentUser.profilePicture.trim())
+                      console.log(
+                        '✅ Photo de profil chargée avec succès:',
+                        currentUser.profilePicture.trim()
+                      )
                     }}
                     onError={(e) => {
-                      console.error('❌ Erreur de chargement de la photo de profil:', currentUser.profilePicture.trim())
-                      console.error('Détails de l\'erreur:', e)
+                      console.error(
+                        '❌ Erreur de chargement de la photo de profil:',
+                        currentUser.profilePicture.trim()
+                      )
+                      console.error("Détails de l'erreur:", e)
                       e.currentTarget.style.display = 'none'
-                      const nextElement = e.currentTarget.nextElementSibling as HTMLElement
+                      const nextElement = e.currentTarget
+                        .nextElementSibling as HTMLElement
                       if (nextElement) {
                         nextElement.style.display = 'flex'
                       }
                     }}
                   />
                 ) : null}
-                <span 
+                <span
                   className={`text-lg font-semibold text-primary ${
                     currentUser.profilePicture ? 'hidden' : 'flex'
                   } items-center justify-center w-full h-full`}
@@ -786,7 +830,8 @@ const Users = () => {
               )}
             </DialogTitle>
             <DialogDescription className='text-sm text-gray-500'>
-              Détails complets de l'utilisateur avec ses transactions et activités
+              Détails complets de l'utilisateur avec ses transactions et
+              activités
             </DialogDescription>
           </DialogHeader>
 
@@ -833,12 +878,20 @@ const Users = () => {
                     <div className='flex items-start gap-2 p-3 bg-red-50 border border-red-200 rounded-lg'>
                       <AlertTriangle className='h-4 w-4 text-red-500 mt-0.5 flex-shrink-0' />
                       <div>
-                        <div className='text-sm font-medium text-red-800'>Raison de la suspension:</div>
-                        <div className='text-sm text-red-700 mt-1'>{currentUser.isSuspended}</div>
+                        <div className='text-sm font-medium text-red-800'>
+                          Raison de la suspension:
+                        </div>
+                        <div className='text-sm text-red-700 mt-1'>
+                          {currentUser.isSuspended}
+                        </div>
                       </div>
                     </div>
                     <Button
-                      onClick={() => handleUserActionLocal(() => handleActivateUser(currentUser.id))}
+                      onClick={() =>
+                        handleUserActionLocal(() =>
+                          handleActivateUser(currentUser.id)
+                        )
+                      }
                       className='w-full bg-green-600 hover:bg-green-700 text-white'
                       size='sm'
                     >
@@ -892,19 +945,16 @@ const Users = () => {
                   </div>
                   <div className='text-center p-3 bg-emerald-50 rounded-lg'>
                     <div className='text-2xl font-bold text-emerald-600'>
-                      €
-                      {currentUser.totalEarnings
-                        ? currentUser.totalEarnings.toFixed(2)
-                        : '0.00'}
+                      {Number(currentUser.wallet?.balance ?? 0).toFixed(2)} £
                     </div>
                     <div className='text-xs text-emerald-600'>Solde cumulé</div>
                   </div>
                   <div className='text-center p-3 bg-teal-50 rounded-lg'>
                     <div className='text-2xl font-bold text-teal-600'>
-                      €
-                      {currentUser.availableBalance
-                        ? currentUser.availableBalance.toFixed(2)
-                        : '0.00'}
+                      {Number(currentUser.wallet?.reservedBalance ?? 0).toFixed(
+                        2
+                      )}{' '}
+                      £
                     </div>
                     <div className='text-xs text-teal-600'>
                       Solde disponible
@@ -953,16 +1003,16 @@ const Users = () => {
                         <div className='flex items-center gap-3'>
                           <div
                             className={`p-2 rounded-full ${
-                              transaction.type === 'credit'
+                              isInflow(transaction.type)
                                 ? 'bg-green-100 text-green-600'
-                                : transaction.type === 'debit'
+                                : isOutflow(transaction.type)
                                 ? 'bg-red-100 text-red-600'
                                 : 'bg-blue-100 text-blue-600'
                             }`}
                           >
-                            {transaction.type === 'credit' ? (
+                            {isInflow(transaction.type) ? (
                               <TrendingUp className='h-4 w-4' />
-                            ) : transaction.type === 'debit' ? (
+                            ) : isOutflow(transaction.type) ? (
                               <TrendingDown className='h-4 w-4' />
                             ) : (
                               <ArrowUpDown className='h-4 w-4' />
@@ -970,11 +1020,7 @@ const Users = () => {
                           </div>
                           <div>
                             <div className='font-medium text-sm'>
-                              {transaction.type === 'credit'
-                                ? 'Réception'
-                                : transaction.type === 'debit'
-                                ? 'Retrait'
-                                : 'Transaction'}
+                              {getTransactionTypeLabel(transaction.type)}
                             </div>
                             <div className='text-xs text-gray-600'>
                               {transaction.description}
@@ -983,12 +1029,12 @@ const Users = () => {
                         </div>
                         <div
                           className={`font-bold text-lg ${
-                            transaction.type === 'credit'
+                            isInflow(transaction.type)
                               ? 'text-green-600'
                               : 'text-red-600'
                           }`}
                         >
-                          {transaction.type === 'credit' ? '+' : '-'}€
+                          {isInflow(transaction.type) ? '+' : '-'}€
                           {Math.abs(transaction.amount).toFixed(2)}
                         </div>
                       </div>
@@ -1036,234 +1082,6 @@ const Users = () => {
             </CardContent>
           </Card>
 
-          {/* Activités récentes */}
-          <Card>
-            <CardHeader>
-              <CardTitle className='text-lg flex items-center gap-2'>
-                <Activity className='h-5 w-5' />
-                Activités récentes
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {isLoading ? (
-                <div className='flex items-center justify-center py-8'>
-                  <RefreshCw className='h-6 w-6 animate-spin text-primary' />
-                  <span className='ml-2 text-sm text-gray-500'>
-                    Chargement des activités...
-                  </span>
-                </div>
-              ) : userActivitiesLocal.length > 0 ? (
-                <div className='space-y-4'>
-                  {userActivitiesLocal.slice(0, 5).map((activity) => {
-                    const getActivityIcon = (type: string) => {
-                      switch (type) {
-                        case 'tool_created':
-                          return <Wrench className='h-4 w-4' />
-                        case 'comment_posted':
-                          return <MessageCircle className='h-4 w-4' />
-                        case 'reservation_request':
-                          return <Calendar className='h-4 w-4' />
-                        case 'favorite_added':
-                          return <Heart className='h-4 w-4' />
-                        default:
-                          return <Activity className='h-4 w-4' />
-                      }
-                    }
-
-                    const getActivityColor = (type: string) => {
-                      switch (type) {
-                        case 'tool_created':
-                          return 'bg-green-100 text-green-600'
-                        case 'comment_posted':
-                          return 'bg-blue-100 text-blue-600'
-                        case 'reservation_request':
-                          return 'bg-orange-100 text-orange-600'
-                        case 'favorite_added':
-                          return 'bg-pink-100 text-pink-600'
-                        default:
-                          return 'bg-gray-100 text-gray-600'
-                      }
-                    }
-
-                    return (
-                      <div
-                        key={activity.id}
-                        className='p-4 bg-gray-50 rounded-lg border-l-4 border-l-blue-300'
-                      >
-                        <div className='flex items-start gap-3'>
-                          <div
-                            className={`p-2 rounded-full ${getActivityColor(
-                              activity.type
-                            )}`}
-                          >
-                            {getActivityIcon(activity.type)}
-                          </div>
-                          <div className='flex-1'>
-                            <div className='font-medium text-sm mb-1'>
-                              {activity.type === 'tool_created' &&
-                                "Création d'outil"}
-                              {activity.type === 'comment_posted' &&
-                                'Commentaire publié'}
-                              {activity.type === 'reservation_request' &&
-                                'Demande de réservation'}
-                              {activity.type === 'favorite_added' &&
-                                'Ajout aux favoris'}
-                              {![
-                                'tool_created',
-                                'comment_posted',
-                                'reservation_request',
-                                'favorite_added',
-                              ].includes(activity.type) && activity.action}
-                            </div>
-
-                            {/* Détails spécifiques selon le type d'activité */}
-                            {activity.type === 'tool_created' &&
-                              activity.details && (
-                                <div className='text-xs text-gray-600 space-y-1'>
-                                  <div>
-                                    <strong>Titre:</strong>{' '}
-                                    {activity.details.title}
-                                  </div>
-                                  <div>
-                                    <strong>Catégorie:</strong>{' '}
-                                    {activity.details.category}
-                                  </div>
-                                  <div>
-                                    <strong>Prix:</strong> €
-                                    {activity.details.price}/jour
-                                  </div>
-                                  <div className='flex gap-2'>
-                                    <Badge
-                                      variant={
-                                        activity.details.moderationStatus ===
-                                        'approved'
-                                          ? 'default'
-                                          : 'outline'
-                                      }
-                                      className='text-xs'
-                                    >
-                                      {activity.details.moderationStatus ===
-                                      'approved'
-                                        ? 'Approuvé'
-                                        : activity.details.moderationStatus ===
-                                          'pending'
-                                        ? 'En attente'
-                                        : activity.details.moderationStatus ===
-                                          'rejected'
-                                        ? 'Rejeté'
-                                        : activity.details.moderationStatus}
-                                    </Badge>
-                                    <Badge
-                                      variant={
-                                        activity.details.isPublished
-                                          ? 'default'
-                                          : 'outline'
-                                      }
-                                      className='text-xs'
-                                    >
-                                      {activity.details.isPublished
-                                        ? 'Publié'
-                                        : 'Non publié'}
-                                    </Badge>
-                                  </div>
-                                </div>
-                              )}
-
-                            {activity.type === 'comment_posted' &&
-                              activity.details && (
-                                <div className='text-xs text-gray-600 space-y-1'>
-                                  <div>
-                                    <strong>Contenu:</strong>{' '}
-                                    {activity.details.content}
-                                  </div>
-                                  <div>
-                                    <strong>Note:</strong>
-                                    <div className='inline-flex items-center ml-1'>
-                                      {[...Array(5)].map((_, i) => (
-                                        <Star
-                                          key={i}
-                                          className={`h-3 w-3 ${
-                                            i < activity.details.rating
-                                              ? 'text-yellow-400 fill-current'
-                                              : 'text-gray-300'
-                                          }`}
-                                        />
-                                      ))}
-                                    </div>
-                                  </div>
-                                  <div>
-                                    <strong>Annonce:</strong>{' '}
-                                    {activity.details.toolTitle}
-                                  </div>
-                                </div>
-                              )}
-
-                            {activity.type === 'reservation_request' &&
-                              activity.details && (
-                                <div className='text-xs text-gray-600 space-y-1'>
-                                  <div>
-                                    <strong>Période:</strong>{' '}
-                                    {new Date(
-                                      activity.details.startDate
-                                    ).toLocaleDateString('fr-FR')}{' '}
-                                    -{' '}
-                                    {new Date(
-                                      activity.details.endDate
-                                    ).toLocaleDateString('fr-FR')}
-                                  </div>
-                                  <div>
-                                    <strong>Outil:</strong>{' '}
-                                    {activity.details.toolTitle}
-                                  </div>
-                                  <div>
-                                    <strong>Propriétaire:</strong>{' '}
-                                    {activity.details.ownerName}
-                                  </div>
-                                  <div>
-                                    <strong>Prix (hors caution):</strong> €
-                                    {activity.details.priceWithoutDeposit}
-                                  </div>
-                                </div>
-                              )}
-
-                            {activity.type === 'favorite_added' &&
-                              activity.details && (
-                                <div className='text-xs text-gray-600 space-y-1'>
-                                  <div>
-                                    <strong>Annonce:</strong>{' '}
-                                    {activity.details.toolTitle}
-                                  </div>
-                                  <div>
-                                    <strong>Catégorie:</strong>{' '}
-                                    {activity.details.category}
-                                  </div>
-                                </div>
-                              )}
-
-                            <div className='text-xs text-gray-500 mt-2'>
-                              {new Date(activity.createdAt).toLocaleDateString(
-                                'fr-FR'
-                              )}{' '}
-                              à{' '}
-                              {new Date(activity.createdAt).toLocaleTimeString(
-                                'fr-FR'
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              ) : (
-                <div className='text-center py-8 text-gray-500'>
-                  <Activity className='h-12 w-12 mx-auto mb-4 opacity-50' />
-                  <p>Aucune activité récente</p>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
           {/* Actions */}
           <div className='flex flex-wrap gap-2 pt-4 border-t'>
             {/* Removed verify button */}
@@ -1274,7 +1092,10 @@ const Users = () => {
                   <label className='text-sm font-medium text-gray-700'>
                     Raison de la suspension
                   </label>
-                  <Select value={suspensionReason} onValueChange={setSuspensionReason}>
+                  <Select
+                    value={suspensionReason}
+                    onValueChange={setSuspensionReason}
+                  >
                     <SelectTrigger className='w-full md:w-64'>
                       <SelectValue placeholder='Sélectionnez une raison' />
                     </SelectTrigger>
@@ -1380,23 +1201,6 @@ const Users = () => {
                 <div className='flex items-center justify-between'>
                   <div>
                     <p className='text-sm font-medium text-gray-600'>
-                      Utilisateurs vérifiés
-                    </p>
-                    <p className='text-2xl font-bold'>
-                      {globalUserStats.verifiedUsers}
-                    </p>
-                  </div>
-                  <div className='h-8 w-8 bg-purple-100 rounded-full flex items-center justify-center'>
-                    <Shield className='h-4 w-4 text-purple-600' />
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className='p-6'>
-                <div className='flex items-center justify-between'>
-                  <div>
-                    <p className='text-sm font-medium text-gray-600'>
                       Nouveaux ce mois
                     </p>
                     <p className='text-2xl font-bold'>
@@ -1444,12 +1248,12 @@ const Users = () => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value='all'>Tous les pays</SelectItem>
-                <SelectItem value='Koweït'>Koweït</SelectItem>
-                <SelectItem value='Arabie Saoudite'>Arabie Saoudite</SelectItem>
-                <SelectItem value='Bahreïn'>Bahreïn</SelectItem>
-                <SelectItem value='Oman'>Oman</SelectItem>
-                <SelectItem value='Qatar'>Qatar</SelectItem>
-                <SelectItem value='Émirats Arabes Unis'>Émirats Arabes Unis</SelectItem>
+                <SelectItem value='KW'>Koweït</SelectItem>
+                <SelectItem value='SA'>Arabie Saoudite</SelectItem>
+                <SelectItem value='BH'>Bahreïn</SelectItem>
+                <SelectItem value='OM'>Oman</SelectItem>
+                <SelectItem value='QA'>Qatar</SelectItem>
+                <SelectItem value='AE'>Émirats Arabes Unis</SelectItem>
               </SelectContent>
             </Select>
             <DateRangePicker
@@ -1602,3 +1406,31 @@ const Users = () => {
 }
 
 export default Users
+
+
+// Helper functions for transaction type handling
+const getTransactionTypeLabel = (type: TransactionType | string) => {
+  const labels: Record<string, string> = {
+    [TransactionType.DEPOSIT]: 'Dépôt',
+    [TransactionType.WITHDRAWAL]: 'Retrait',
+    [TransactionType.PAYMENT]: 'Paiement',
+    [TransactionType.REFUND]: 'Remboursement',
+    TRANSFER: 'Transfert',
+    DISPUTE: 'Litige',
+    RENTAL_INCOME: 'Revenus de location',
+    FEE: 'Frais',
+  }
+  return labels[type] || 'Transaction'
+}
+
+const isInflow = (type: TransactionType | string) =>
+  type === TransactionType.DEPOSIT ||
+  type === 'RENTAL_INCOME' ||
+  type === TransactionType.REFUND
+
+const isOutflow = (type: TransactionType | string) =>
+  type === TransactionType.WITHDRAWAL ||
+  type === TransactionType.PAYMENT ||
+  type === 'TRANSFER' ||
+  type === 'DISPUTE' ||
+  type === 'FEE'

@@ -148,8 +148,8 @@ const ListingDetailsModal = ({
 }: {
   listing: any
   onApprove: (id: string) => void
-  onReject: (id: string) => void
-  onDelete: (id: string) => void
+  onReject: (id: string, reason: string) => void
+  onDelete: (id: string, reason: string) => void
 }) => {
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
   const [fullListing, setFullListing] = useState<Tool | null>(null)
@@ -249,7 +249,7 @@ const ListingDetailsModal = ({
   }
 
   const handleDeleteSubmit = () => {
-    onDelete(listing.id)
+    onDelete(listing.id, deletionReason)
     setShowDeleteDialog(false)
     setDeletionReason('')
     setIsOpen(false)
@@ -1098,10 +1098,10 @@ const Listings = () => {
         categoryId: categoryFilter !== 'all' ? categoryFilter : undefined,
         subcategoryId:
           subcategoryFilter !== 'all' ? subcategoryFilter : undefined,
-        startDate: dateRange?.from
+        dateFrom: dateRange?.from
           ? dateRange.from.toISOString().split('T')[0]
           : undefined,
-        endDate: dateRange?.to
+        dateTo: dateRange?.to
           ? dateRange.to.toISOString().split('T')[0]
           : undefined,
         page: currentPage,
@@ -1114,9 +1114,9 @@ const Listings = () => {
       console.log('=== API Response Debug ===')
       console.log('Full response:', response)
       console.log('Response data:', response.data)
-      console.log('Response success:', response.success)
+      console.log('Response success:', (response as any)?.success)
 
-      if (response.success && response.data) {
+      if (response && (response as any).data) {
         // Extract data from response.data.data according to API structure
         const toolsData = response.data.data || response.data
 
@@ -1134,41 +1134,44 @@ const Listings = () => {
 
           // Check address properties
           console.log('Address properties:', {
-            pickup_address: toolsData[0].pickup_address,
             pickupAddress: toolsData[0].pickupAddress,
-            location: toolsData[0].location,
-            address: toolsData[0].address,
-          })
+            })
         }
 
         const toolsArray = Array.isArray(toolsData) ? toolsData : []
         setAllTools(toolsArray)
+        // Fallback client: si l'API ne filtre pas sur la modération, filtrer côté client
+        const finalTools =
+          moderationStatusFilter !== 'all'
+            ? toolsArray.filter(
+                (t: any) => t.moderationStatus === moderationStatusFilter
+              )
+            : toolsArray
+        setTools(finalTools)
 
-        // Appliquer la pagination côté client
-        const startIndex = (currentPage - 1) * itemsPerPage
-        const endIndex = startIndex + itemsPerPage
-        const paginatedTools = toolsArray.slice(startIndex, endIndex)
-        setTools(paginatedTools)
+        // Utiliser la pagination côté serveur
+        const pagination =
+          (response.data && (response.data as any).pagination) ||
+          (response as any).pagination ||
+          {}
+        const apiTotal =
+          pagination.total ?? response.data.total ?? toolsArray.length
+        const apiTotalPages =
+          pagination.totalPages ??
+          response.data.totalPages ??
+          Math.ceil(apiTotal / itemsPerPage)
 
-        // Calculer totalTools et totalPages
-        const apiTotal = response.data.total || response.data.totalCount || 0
-        const calculatedTotal = apiTotal > 0 ? apiTotal : toolsArray.length
-        const calculatedPages = Math.ceil(calculatedTotal / itemsPerPage)
+        setTotalTools(apiTotal)
+        setTotalPages(apiTotalPages)
 
-        setTotalTools(calculatedTotal)
-        setTotalPages(response.data.totalPages || calculatedPages)
-
-        // Debug: Logs pour la pagination
-        console.log('Pagination Debug - Success:', {
+        // Debug: Logs pour la pagination (server-side)
+        console.log('Pagination Debug - Success (server-side):', {
           apiTotal,
-          calculatedTotal,
-          calculatedPages,
+          apiTotalPages,
           itemsPerPage,
           currentPage,
           toolsArrayLength: toolsArray.length,
-          responseTotalPages: response.data.totalPages,
-          paginationCondition:
-            calculatedPages > 1 || calculatedTotal > itemsPerPage,
+          paginationObject: pagination,
         })
       } else {
         // Only throw error if response indicates failure, not just missing data structure
@@ -1366,21 +1369,9 @@ const Listings = () => {
     }
   }
 
-  // Fonction pour appliquer la pagination côté client
+  // Supprimer la pagination côté client (utilisation de la pagination serveur)
   const applyClientSidePagination = () => {
-    const startIndex = (currentPage - 1) * itemsPerPage
-    const endIndex = startIndex + itemsPerPage
-    const paginatedTools = allTools.slice(startIndex, endIndex)
-    setTools(paginatedTools)
-
-    console.log('Client-side pagination applied:', {
-      currentPage,
-      itemsPerPage,
-      startIndex,
-      endIndex,
-      totalTools: allTools.length,
-      displayedTools: paginatedTools.length,
-    })
+    // Obsolète: pagination côté serveur active
   }
 
   // Load data on component mount and when filters change
@@ -1393,14 +1384,14 @@ const Listings = () => {
     categoryFilter,
     subcategoryFilter,
     dateRange,
+    currentPage,
+    itemsPerPage,
   ])
 
-  // Apply client-side pagination when currentPage changes
-  useEffect(() => {
-    if (allTools.length > 0) {
-      applyClientSidePagination()
-    }
-  }, [currentPage, allTools])
+  // Recharger lors des changements de page ou taille (doublon supprimé car déjà couvert ci-dessus)
+  // useEffect(() => {
+  //   loadTools()
+  // }, [currentPage, itemsPerPage])
 
   useEffect(() => {
     loadStats()
@@ -1671,14 +1662,14 @@ const Listings = () => {
       {/* Filters */}
       <Card>
         <CardContent className='p-6'>
-          <div className='grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4'>
-            <div className='relative'>
+          <div className='grid grid-cols-1 grid-cols-2 grid-cols-3 grid-cols-4 grid-cols-5 gap-4'>
+            <div className='relative w-full '>
               <Search className='absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4' />
               <Input
-                placeholder='Rechercher par titre ou propriétaire...'
+                placeholder='Rechercher par titre...'
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className='pl-10'
+                className='pl-10 '
               />
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -1688,14 +1679,29 @@ const Listings = () => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value='all'>Tous les statuts</SelectItem>
-                <SelectItem value='UNDER_REVIEW'>En attente</SelectItem>
                 <SelectItem value='PUBLISHED'>Publiée</SelectItem>
                 <SelectItem value='DRAFT'>Brouillon</SelectItem>
-                <SelectItem value='ARCHIVED'>Archivée</SelectItem>
+              </SelectContent>
+            </Select>
+
+            <Select
+              value={moderationStatusFilter}
+              onValueChange={setModerationStatusFilter}
+            >
+              <SelectTrigger>
+                <Filter className='h-4 w-4 mr-2' />
+                <SelectValue placeholder='Modération' />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value='all'>Toutes les modérations</SelectItem>
+                <SelectItem value='Pending'>En attente</SelectItem>
+                <SelectItem value='Confirmed'>Confirmée</SelectItem>
+                <SelectItem value='Rejected'>Rejetée</SelectItem>
               </SelectContent>
             </Select>
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
               <SelectTrigger>
+                <Filter className='h-4 w-4 mr-2' />
                 <SelectValue placeholder='Catégorie' />
               </SelectTrigger>
               <SelectContent>
@@ -1712,6 +1718,7 @@ const Listings = () => {
               onValueChange={setSubcategoryFilter}
             >
               <SelectTrigger>
+                <Filter className='h-4 w-4 mr-2' />
                 <SelectValue placeholder='Sous-catégorie' />
               </SelectTrigger>
               <SelectContent>
@@ -1806,15 +1813,7 @@ const Listings = () => {
                                   ? `${listing.owner.firstName} ${listing.owner.lastName}`
                                   : 'N/A'}
                               </div>
-                              <div className='flex items-center gap-1 text-sm text-gray-600 mt-1'>
-                                <MapPin className='h-3 w-3' />
-                                <span className='line-clamp-1'>
-                                  {listing.pickupAddress ||
-                                    listing.location ||
-                                    listing.address ||
-                                    'N/A'}
-                                </span>
-                              </div>
+                            
                             </div>
                           </div>
                         </TableCell>
@@ -1870,7 +1869,12 @@ const Listings = () => {
                         </TableCell>
                         <TableCell>
                           <div className='flex items-center gap-1'>
-                            <ListingDetailsModal listing={listing} />
+                            <ListingDetailsModal 
+                              listing={listing} 
+                              onApprove={handleApprove} 
+                              onReject={handleReject} 
+                              onDelete={handleDelete} 
+                            />
                             {listing.moderationStatus === 'Pending' && (
                               <>
                                 <ApproveDialog

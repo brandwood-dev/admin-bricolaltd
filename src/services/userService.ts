@@ -207,11 +207,29 @@ class UserService {
   }
 
   async exportUsersCSV(params?: UserFilterParams): Promise<ApiResponse<Blob>> {
-    return await apiClient.get<Blob>(`/users/export/csv`, { params, responseType: 'blob' });
+    // Use downloadFile to ensure a consistent ApiResponse shape with success flag
+    return await apiClient.downloadFile(`/users/export/csv`, { params });
   }
 
   async exportUsersExcel(params?: UserFilterParams): Promise<ApiResponse<Blob>> {
     return await apiClient.get<Blob>(`/users/export/excel`, { params, responseType: 'blob' });
+  }
+
+  // New: Fetch full users list JSON for custom CSV generation
+  async exportUsersList(params?: UserFilterParams): Promise<ApiResponse<User[]>> {
+    const mapped: Record<string, any> = {};
+    if (params?.search) mapped.search = params.search;
+    if (typeof params?.isActive === 'boolean') {
+      mapped.status = params.isActive ? 'active' : 'inactive';
+    }
+    if (typeof params?.verifiedEmail === 'boolean') mapped.verified = params.verifiedEmail;
+    if (typeof params?.isAdmin === 'boolean') mapped.isAdmin = params.isAdmin;
+    if (params?.startDate) mapped.dateFrom = params.startDate;
+    if (params?.endDate) mapped.dateTo = params.endDate;
+    if (params?.city) mapped.city = params.city;
+    if (params?.country) mapped.country = params.country;
+
+    return await apiClient.get<User[]>(`/users/export`, { params: mapped });
   }
 
   async getUserStats(): Promise<ApiResponse<UserStats>> {

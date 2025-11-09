@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { AdminNotificationCenter } from "../notifications/AdminNotificationCenter";
+import { AdminNotificationBadge } from "../notifications/AdminNotificationBadge";
 import { Outlet, useNavigate } from "react-router-dom";
 import { 
   LayoutDashboard, 
@@ -25,7 +25,6 @@ import { useAuth } from "@/contexts/AuthContext";
 
 const AdminLayout = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isNotificationOpen, setIsNotificationOpen] = useState(false);
   const { logout, user } = useAuth();
   const navigate = useNavigate();
 
@@ -58,7 +57,7 @@ const AdminLayout = () => {
           >
             <UserCircle className="h-5 w-5" />
           </Button>
-          <AdminNotificationCenter />
+          <AdminNotificationBadge size="sm" />
         </div>
       </div>
 
@@ -100,7 +99,7 @@ const AdminLayout = () => {
                     <UserCircle className="h-4 w-4" />
                   </Button>
                 </div>
-                <AdminNotificationCenter />
+                <AdminNotificationBadge size="sm" />
                 <Button
                   variant="ghost"
                   size="sm"

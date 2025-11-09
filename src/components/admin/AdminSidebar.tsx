@@ -101,12 +101,12 @@ const AdminSidebar = ({ onItemClick }: AdminSidebarProps) => {
 
   // Communication & Support
   const communicationItems = [
-    // {
-    //   title: "Notifications",
-    //   icon: Bell,
-    //   href: "/admin/notifications",
-    //   permission: "manage_notifications"
-    // },
+    {
+      title: 'Notifications',
+      icon: Bell,
+      href: '/admin/notifications',
+      permission: 'manage_notifications',
+    },
     {
       title: 'Support & Contacts',
       icon: Mail,

@@ -9,6 +9,7 @@ import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/services/api';
 import { toast } from 'sonner';
+import { getAdminSocket } from '@/services/adminSocket';
 
 export interface AdminNotification {
   id: string;
@@ -109,6 +110,7 @@ export const AdminNotificationCenter: React.FC<AdminNotificationCenterProps> = (
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<AdminNotification[]>([]);
   const [loading, setLoading] = useState(false);
+  const [wsUnreadCount, setWsUnreadCount] = useState<number | null>(null);
 
   const fetchNotifications = async () => {
     try {
@@ -276,9 +278,60 @@ export const AdminNotificationCenter: React.FC<AdminNotificationCenterProps> = (
     }
   };
 
+  // Setup admin websocket connection for real-time unread count and notifications
+  useEffect(() => {
+    const socket = getAdminSocket();
+    if (!socket) {
+      return;
+    }
+
+    const onUnread = (payload: { count: number }) => {
+      if (typeof payload?.count === 'number') {
+        setWsUnreadCount(payload.count);
+      }
+    };
+
+    const onNewNotification = (notification: AdminNotification) => {
+      if (notification && notification.id) {
+        setNotifications(prev => [notification, ...prev]);
+        setWsUnreadCount((prev) => {
+          if (typeof prev === 'number') return prev + (notification.isRead ? 0 : 1);
+          return prev;
+        });
+      }
+    };
+
+    const onNotifications = (payload: { notifications?: { data?: AdminNotification[] }; unreadCount?: number }) => {
+      const list = payload?.notifications?.data || [];
+      setNotifications(Array.isArray(list) ? list : []);
+      if (typeof payload?.unreadCount === 'number') {
+        setWsUnreadCount(payload.unreadCount);
+      }
+    };
+
+    socket.on('unread_count', onUnread);
+    socket.on('new_notification', onNewNotification);
+    socket.on('notifications', onNotifications);
+
+    // Ask for initial notifications via WS as soon as connected
+    socket.emit('get_notifications');
+
+    return () => {
+      socket.off('unread_count', onUnread);
+      socket.off('new_notification', onNewNotification);
+      socket.off('notifications', onNotifications);
+    };
+  }, []);
+
   useEffect(() => {
     if (isOpen) {
-      fetchNotifications();
+      // Prefer WS when available
+      const socket = getAdminSocket();
+      if (socket) {
+        socket.emit('get_notifications');
+      } else {
+        fetchNotifications();
+      }
     }
   }, [isOpen]);
 
@@ -295,10 +348,17 @@ export const AdminNotificationCenter: React.FC<AdminNotificationCenterProps> = (
 
   // Initial fetch
   useEffect(() => {
-    fetchNotifications();
+    // Prefer WS when available
+    const socket = getAdminSocket();
+    if (socket) {
+      socket.emit('get_notifications');
+    } else {
+      fetchNotifications();
+    }
   }, []);
 
-  const unreadCount = notifications.filter(n => !n.isRead).length;
+  const unreadCountLocal = notifications.filter(n => !n.isRead).length;
+  const unreadCount = typeof wsUnreadCount === 'number' ? wsUnreadCount : unreadCountLocal;
   const highPriorityCount = notifications.filter(n => !n.isRead && n.priority === 'high').length;
 
   return (
@@ -323,7 +383,13 @@ export const AdminNotificationCenter: React.FC<AdminNotificationCenterProps> = (
             <Button 
               variant="ghost" 
               size="sm" 
-              onClick={markAllAsRead}
+              onClick={() => {
+                const socket = getAdminSocket();
+                if (socket) {
+                  socket.emit('mark_all_as_read');
+                }
+                markAllAsRead();
+              }}
               className="text-xs"
             >
               Tout marquer comme lu

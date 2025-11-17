@@ -57,17 +57,17 @@ class WithdrawalsService {
 
   // Get withdrawal statistics
   async getWithdrawalStats(): Promise<ApiResponse<WithdrawalStats>> {
-    return await apiClient.get<WithdrawalStats>('/admin/transactions/stats', {
-      params: { type: TransactionType.WITHDRAWAL }
-    });
+    return await apiClient.get<WithdrawalStats>('/admin/withdrawals/stats');
   }
 
   // Process withdrawal (approve/reject)
-  async processWithdrawal(id: string, data: ProcessWithdrawalData): Promise<ApiResponse<WithdrawalRequest>> {
+  async processWithdrawal(id: string, data: ProcessWithdrawalData & { method?: 'wise' | 'stripe_connect' | 'stripe_payout'; bankAccountDetails?: { iban?: string; bic?: string; accountHolderName?: string; currency?: string } }): Promise<ApiResponse<WithdrawalRequest>> {
     if (data.action === 'approve') {
       return await apiClient.post<WithdrawalRequest>(`/admin/withdrawals/${id}/approve`, {
         stripeAccountId: data.externalReference,
-        adminNotes: data.adminNotes
+        adminNotes: data.adminNotes,
+        method: data.method,
+        bankAccountDetails: data.bankAccountDetails,
       });
     } else {
       return await apiClient.post<WithdrawalRequest>(`/admin/withdrawals/${id}/reject`, {
@@ -78,11 +78,13 @@ class WithdrawalsService {
   }
 
   // Approve withdrawal
-  async approveWithdrawal(id: string, adminNotes?: string, externalReference?: string): Promise<ApiResponse<WithdrawalRequest>> {
+  async approveWithdrawal(id: string, adminNotes?: string, externalReference?: string, method?: 'wise' | 'stripe_connect' | 'stripe_payout', bankAccountDetails?: { iban?: string; bic?: string; accountHolderName?: string; currency?: string }): Promise<ApiResponse<WithdrawalRequest>> {
     return this.processWithdrawal(id, {
       action: 'approve',
       adminNotes,
-      externalReference
+      externalReference,
+      method,
+      bankAccountDetails,
     });
   }
 
@@ -92,6 +94,19 @@ class WithdrawalsService {
       action: 'reject',
       rejectionReason,
       adminNotes
+    });
+  }
+
+  async confirmWithdrawal(id: string): Promise<ApiResponse<WithdrawalRequest>> {
+    return await apiClient.patch<WithdrawalRequest>(`/admin/transactions/${id}/status`, {
+      status: 'CONFIRMED'
+    });
+  }
+
+  async cancelWithdrawal(id: string, reason: string): Promise<ApiResponse<WithdrawalRequest>> {
+    return await apiClient.patch<WithdrawalRequest>(`/admin/transactions/${id}/status`, {
+      status: 'CANCELLED',
+      reason
     });
   }
 

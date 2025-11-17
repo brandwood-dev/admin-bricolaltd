@@ -94,10 +94,19 @@ const Withdrawals = () => {
         startDate: dateRange?.from?.toISOString(),
         endDate: dateRange?.to?.toISOString()
       };
-      
+      console.log('Admin Withdrawals: filters', filters);
       const response = await withdrawalsService.getWithdrawals(filters);
-      setWithdrawals(response.data?.data || []);
-      setTotalWithdrawals(response.data?.total || 0);
+      console.log('Admin Withdrawals: raw response', response);
+      const payload: any = response?.data;
+      console.log('Admin Withdrawals: payload', payload);
+      const list: any[] = Array.isArray(payload?.data)
+        ? payload.data
+        : (Array.isArray(payload) ? payload : []);
+      const total: number = typeof payload?.total === 'number' ? payload.total : (Array.isArray(list) ? list.length : 0);
+      console.log('Admin Withdrawals: list length', list.length);
+      console.log('Admin Withdrawals: total', total);
+      setWithdrawals(list);
+      setTotalWithdrawals(total);
     } catch (error) {
       console.error('Error loading withdrawals:', error);
       toast({
@@ -114,7 +123,9 @@ const Withdrawals = () => {
   const loadStats = async () => {
     try {
       const statsData = await withdrawalsService.getWithdrawalStats();
-      setStats(statsData);
+      console.log('Admin Withdrawals: raw stats response', statsData);
+      setStats((statsData as any)?.data || null);
+      console.log('Admin Withdrawals: bound stats', (statsData as any)?.data || null);
     } catch (error) {
       console.error('Error loading withdrawal stats:', error);
     }
@@ -135,8 +146,8 @@ const Withdrawals = () => {
     switch (status) {
       case "pending":
         return <Badge className="bg-warning text-warning-foreground">En attente</Badge>;
-      case "approved":
-        return <Badge className="bg-blue-500 text-white">Approuvé</Badge>;
+      case "confirmed":
+        return <Badge className="bg-blue-500 text-white">Confirmé</Badge>;
       case "completed":
         return <Badge className="bg-success text-success-foreground">Terminé</Badge>;
       case "rejected":
@@ -159,45 +170,45 @@ const Withdrawals = () => {
     }
   };
 
-  const handleApprove = async (withdrawalId: string) => {
+  const handleConfirm = async (withdrawalId: string) => {
     try {
-      await withdrawalsService.approveWithdrawal(withdrawalId);
+      await withdrawalsService.confirmWithdrawal(withdrawalId);
       toast({
-        title: "Retrait approuvé",
-        description: "Le retrait a été approuvé et sera traité sous 2-3 jours ouvrés.",
+        title: "Demande confirmée",
+        description: "Le retrait a été marqué comme confirmé.",
       });
-      loadWithdrawals(); // Refresh data
+      loadWithdrawals();
     } catch (error) {
       toast({
         title: "Erreur",
-        description: "Impossible d'approuver le retrait.",
+        description: "Impossible de confirmer le retrait.",
         variant: "destructive",
       });
     }
   };
 
-  const handleReject = async (withdrawalId: string, reason: string) => {
+  const handleCancel = async (withdrawalId: string, reason: string) => {
     if (!reason.trim()) {
       toast({
         title: "Erreur",
-        description: "Veuillez spécifier un motif de rejet.",
+        description: "Veuillez spécifier un motif d'annulation.",
         variant: "destructive",
       });
       return;
     }
     
     try {
-      await withdrawalsService.rejectWithdrawal(withdrawalId, { reason });
+      await withdrawalsService.cancelWithdrawal(withdrawalId, reason);
       toast({
-        title: "Retrait rejeté",
-        description: "Le retrait a été rejeté et l'utilisateur a été notifié.",
+        title: "Retrait annulé",
+        description: "La demande a été annulée et l'utilisateur a été notifié.",
       });
       setRejectionReason("");
       loadWithdrawals(); // Refresh data
     } catch (error) {
       toast({
         title: "Erreur",
-        description: "Impossible de rejeter le retrait.",
+        description: "Impossible d'annuler le retrait.",
         variant: "destructive",
       });
     }
@@ -264,8 +275,8 @@ const Withdrawals = () => {
                     <div className="text-sm sm:text-lg font-bold text-primary">{withdrawal.user?.completedRentals || 0}</div>
                     <div className="text-xs sm:text-sm text-gray-600">Locations</div>
                   </div>
-                  <div className="text-center p-2 sm:p-3 bg-green-100 rounded-lg">
-                    <div className="text-sm sm:text-lg font-bold text-green-600">{withdrawal.user?.earnings || 0}€</div>
+                    <div className="text-center p-2 sm:p-3 bg-green-100 rounded-lg">
+                    <div className="text-sm sm:text-lg font-bold text-green-600">£{withdrawal.user?.earnings || 0}</div>
                     <div className="text-xs sm:text-sm text-gray-600">Gains totaux</div>
                   </div>
                 </div>
@@ -276,23 +287,23 @@ const Withdrawals = () => {
             <Card>
               <CardHeader>
                 <CardTitle className="text-lg flex items-center gap-2">
-                  <Euro className="h-5 w-5" />
+                  <PoundSterling className="h-5 w-5" />
                   Détails financiers
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Montant demandé:</span>
-                  <span className="font-semibold">{withdrawal.amount}€</span>
+                  <span className="font-semibold">£{withdrawal.amount}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Commission plateforme (5%):</span>
-                  <span className="text-red-600">-{withdrawal.fees}€</span>
+                  <span className="text-red-600">-£{withdrawal.fees}</span>
                 </div>
                 <div className="border-t pt-2">
                   <div className="flex justify-between">
                     <span className="font-semibold">Montant net à verser:</span>
-                    <span className="font-bold text-lg text-primary">{withdrawal.netAmount}€</span>
+                  <span className="font-bold text-lg text-primary">£{withdrawal.netAmount}</span>
                   </div>
                 </div>
                 <div className="text-sm text-gray-600">
@@ -391,23 +402,23 @@ const Withdrawals = () => {
                 {withdrawal.status === "pending" && (
                   <>
                     <Button 
-                      onClick={() => handleApprove(withdrawal.id)}
-                      className="w-full bg-success hover:bg-success/90"
+                      onClick={() => handleConfirm(withdrawal.id)}
+                      className="w-full bg-blue-600 hover:bg-blue-700"
                     >
                       <Check className="h-4 w-4 mr-2" />
-                      Approuver le retrait
+                      Confirmer la demande
                     </Button>
                     
                     <RejectDialog 
                       withdrawalId={withdrawal.id}
-                      onReject={handleReject}
+                      onReject={handleCancel}
                       reason={rejectionReason}
                       setReason={setRejectionReason}
                     />
                   </>
                 )}
                 
-                {withdrawal.status === "approved" && (
+                {withdrawal.status === "confirmed" && (
                   <Button 
                     onClick={() => handleComplete(withdrawal.id)}
                     className="w-full"
@@ -439,18 +450,18 @@ const Withdrawals = () => {
       </AlertDialogTrigger>
       <AlertDialogContent>
         <AlertDialogHeader>
-          <AlertDialogTitle>Rejeter cette demande</AlertDialogTitle>
+          <AlertDialogTitle>Annuler cette demande</AlertDialogTitle>
           <AlertDialogDescription>
-            Veuillez spécifier le motif du rejet. L'utilisateur sera notifié.
+            Veuillez spécifier le motif d'annulation. L'utilisateur sera notifié.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <div className="space-y-2">
-          <Label htmlFor="rejection-reason">Motif du rejet</Label>
+          <Label htmlFor="rejection-reason">Motif d'annulation</Label>
           <Textarea
             id="rejection-reason"
             value={reason}
             onChange={(e) => setReason(e.target.value)}
-            placeholder="Expliquez pourquoi cette demande est rejetée..."
+            placeholder="Expliquez pourquoi cette demande est annulée..."
             rows={3}
           />
         </div>
@@ -460,22 +471,23 @@ const Withdrawals = () => {
             onClick={() => onReject(withdrawalId, reason)}
             className="bg-destructive hover:bg-destructive/90"
           >
-            Rejeter la demande
+            Annuler la demande
           </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
   );
 
-  const filteredWithdrawals = withdrawals.filter(withdrawal => {
+  console.log('Admin Withdrawals: state withdrawals length', Array.isArray(withdrawals) ? withdrawals.length : 'not array');
+  const filteredWithdrawals = (Array.isArray(withdrawals) ? withdrawals : []).filter(withdrawal => {
     const matchesSearch = searchTerm === "" || 
       withdrawal.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
       (withdrawal.user?.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) || withdrawal.user?.lastName?.toLowerCase().includes(searchTerm.toLowerCase())) ||
       withdrawal.user?.email?.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStatus = statusFilter === "all" || withdrawal.status === statusFilter;
-    const matchesType = typeFilter === "all" || withdrawal.type === typeFilter;
-    return matchesSearch && matchesStatus && matchesType;
+    return matchesSearch && matchesStatus;
   });
+  console.log('Admin Withdrawals: filtered length', filteredWithdrawals.length);
 
   const totalPages = Math.ceil(totalWithdrawals / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -505,6 +517,19 @@ const Withdrawals = () => {
           placeholder="Filtrer par date de demande"
         />
       </div>
+
+      {((stats?.pendingCount || 0) > 0) && (
+        <Card className="border-amber-300 bg-amber-50">
+          <CardContent className="p-4 flex items-center gap-3">
+            <AlertTriangle className="h-5 w-5 text-amber-600" />
+            <div>
+              <p className="text-sm text-amber-800">
+                {stats?.pendingCount} demandes de retrait en attente d’approbation.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Portefeuille de la plateforme */}
       <Card className="bg-gradient-to-r from-primary/10 to-primary/5 border-primary/20">
@@ -592,7 +617,7 @@ const Withdrawals = () => {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Approuvés</p>
+                <p className="text-sm text-gray-600">Confirmés</p>
                 <p className="text-2xl font-bold text-blue-500">
                   {stats?.approvedCount || 0}
                 </p>
@@ -620,7 +645,7 @@ const Withdrawals = () => {
               <div>
                 <p className="text-sm text-gray-600">Total retraits</p>
                 <p className="text-2xl font-bold text-primary">
-                  {stats?.totalAmount?.toFixed(0) || 0}€
+                  £{(stats?.totalAmount || 0).toFixed(0)}
                 </p>
               </div>
               <DollarSign className="h-8 w-8 text-primary" />
@@ -650,22 +675,12 @@ const Withdrawals = () => {
               <SelectContent>
                 <SelectItem value="all">Tous les statuts</SelectItem>
                 <SelectItem value="pending">En attente</SelectItem>
-                <SelectItem value="approved">Approuvé</SelectItem>
+                <SelectItem value="confirmed">Confirmé</SelectItem>
                 <SelectItem value="completed">Terminé</SelectItem>
                 <SelectItem value="rejected">Rejeté</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={typeFilter} onValueChange={setTypeFilter}>
-              <SelectTrigger>
-                <User className="h-4 w-4 mr-2" />
-                <SelectValue placeholder="Type de retrait" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Tous les types</SelectItem>
-                <SelectItem value="user">Utilisateur</SelectItem>
-                <SelectItem value="platform">Plateforme (Owner)</SelectItem>
-              </SelectContent>
-            </Select>
+            {/* Filtre par type supprimé */}
           </div>
         </CardContent>
       </Card>
@@ -682,7 +697,7 @@ const Withdrawals = () => {
                 <TableRow>
                   <TableHead>Demande</TableHead>
                   <TableHead className="hidden md:table-cell">Utilisateur</TableHead>
-                  <TableHead className="hidden sm:table-cell">Type</TableHead>
+                  
                   <TableHead>Montant</TableHead>
                   <TableHead className="hidden lg:table-cell">Méthode</TableHead>
                   <TableHead>Statut</TableHead>
@@ -707,15 +722,11 @@ const Withdrawals = () => {
                         <div className="text-sm text-gray-500">{withdrawal.user?.email || 'N/A'}</div>
                       </div>
                     </TableCell>
-                    <TableCell className="hidden sm:table-cell">
-                      <Badge variant={withdrawal.type === "platform" ? "default" : "outline"}>
-                        {withdrawal.type === "platform" ? "Plateforme" : "Utilisateur"}
-                      </Badge>
-                    </TableCell>
+                    
                     <TableCell>
                       <div>
-                        <div className="font-semibold">{withdrawal.amount}€</div>
-                        <div className="text-sm text-gray-500">Frais: {withdrawal.fees}€</div>
+                        <div className="font-semibold">£{withdrawal.amount}</div>
+                        <div className="text-sm text-gray-500">Frais: £{withdrawal.fees}</div>
                       </div>
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">
@@ -726,13 +737,67 @@ const Withdrawals = () => {
                       <div className="flex items-center gap-2">
                         <WithdrawalDetailsModal withdrawal={withdrawal} />
                         {withdrawal.status === "pending" && (
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => handleApprove(withdrawal.id)}
-                          >
-                            <Check className="h-4 w-4 text-success" />
-                          </Button>
+                          <>
+                            {/* Confirm with dialog */}
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm"
+                                  title="Confirmer la demande"
+                                >
+                                  <Check className="h-4 w-4 text-success" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Confirmer cette demande</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Êtes-vous sûr de vouloir confirmer cette demande de retrait ?
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Annuler</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => handleConfirm(withdrawal.id)}>
+                                    Confirmer
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+
+                            {/* Cancel with confirmation and reason */}
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="sm" title="Annuler la demande">
+                                  <X className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Annuler cette demande</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Veuillez spécifier le motif d'annulation. L'utilisateur sera notifié.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <div className="space-y-2">
+                                  <Label htmlFor="cancel-reason">Motif d'annulation</Label>
+                                  <Textarea
+                                    id="cancel-reason"
+                                    value={rejectionReason}
+                                    onChange={(e) => setRejectionReason(e.target.value)}
+                                    placeholder="Expliquez pourquoi cette demande est annulée..."
+                                    rows={3}
+                                  />
+                                </div>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Fermer</AlertDialogCancel>
+                                  <AlertDialogAction onClick={() => handleCancel(withdrawal.id, rejectionReason)} className="bg-destructive hover:bg-destructive/90">
+                                    Annuler la demande
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </>
                         )}
                       </div>
                     </TableCell>

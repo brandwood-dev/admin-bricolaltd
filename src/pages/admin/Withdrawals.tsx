@@ -157,6 +157,19 @@ const Withdrawals = () => {
     }
   };
 
+  const resolveMethod = (withdrawal: any): string | undefined => {
+    if (withdrawal?.method) return withdrawal.method
+    if (withdrawal?.paymentMethod) return withdrawal.paymentMethod
+    try {
+      const ext = typeof withdrawal?.externalReference === 'string' 
+        ? JSON.parse(withdrawal.externalReference) 
+        : withdrawal?.externalReference
+      return ext?.method
+    } catch {
+      return undefined
+    }
+  }
+
   const getMethodBadge = (method: string) => {
     switch (method) {
       case "bank_transfer":
@@ -165,23 +178,94 @@ const Withdrawals = () => {
         return <Badge className="bg-blue-600 text-white">PayPal</Badge>;
       case "check":
         return <Badge variant="secondary">Chèque</Badge>;
+      case "stripe_connect":
+        return <Badge className="bg-purple-600 text-white">Stripe Connect</Badge>;
+      case "stripe_payout":
+        return <Badge className="bg-indigo-600 text-white">Stripe Payout</Badge>;
+      case "wise":
+        return <Badge className="bg-green-600 text-white">Wise</Badge>;
       default:
-        return <Badge variant="outline">Autre</Badge>;
+        return <Badge variant="outline">{method || 'Autre'}</Badge>;
     }
   };
 
-  const handleConfirm = async (withdrawalId: string) => {
+  const handleConfirm = async (withdrawalId: string, stripeAccountId?: string, method?: string, amountGBP?: number) => {
     try {
-      await withdrawalsService.confirmWithdrawal(withdrawalId);
-      toast({
-        title: "Demande confirmée",
-        description: "Le retrait a été marqué comme confirmé.",
-      });
+      // Use the new processWithdrawal method for real transfers
+      if (method === 'stripe_connect' && stripeAccountId) {
+        console.log('[Admin Withdrawals] Stripe Connect process', { withdrawalId, stripeAccountId, amountGBP })
+        await withdrawalsService.approveWithdrawal(
+          withdrawalId,
+          'Processed via Stripe Connect',
+          stripeAccountId,
+          'stripe_connect'
+        );
+        toast({
+          title: "Transfer Initiated",
+          description: "Real Stripe Connect transfer has been initiated.",
+        });
+      } else if (method === 'wise' || method === 'bank_transfer') {
+        if ((amountGBP || 0) < 50) {
+          toast({
+            title: "Montant insuffisant",
+            description: "Le montant de retrait doit être au moins £50.",
+            variant: "destructive",
+          })
+          return
+        }
+        const currencyFromIban = (iban: string) => {
+          const cc = (iban || '').trim().slice(0,2).toUpperCase()
+          if (cc === 'GB') return 'GBP'
+          if (cc === 'FR' || cc === 'DE' || cc === 'ES' || cc === 'IT' || cc === 'NL' || cc === 'BE') return 'EUR'
+          if (cc === 'AE') return 'AED'
+          return 'GBP'
+        }
+        const iban = prompt('IBAN du bénéficiaire') || ''
+        const bic = prompt('BIC/SWIFT du bénéficiaire') || ''
+        const accountHolderName = prompt('Titulaire du compte') || ''
+        const currency = currencyFromIban(iban)
+        console.log('[Admin Withdrawals] Wise process', { withdrawalId, iban, bic, accountHolderName, currency, amountGBP })
+        if (!iban || !bic || !accountHolderName) {
+          toast({
+            title: "Informations manquantes",
+            description: "Veuillez fournir IBAN, BIC et titulaire du compte.",
+            variant: "destructive",
+          })
+          return
+        }
+        await withdrawalsService.approveWithdrawal(
+          withdrawalId,
+          'Processed via Wise',
+          undefined,
+          'wise',
+          { iban, bic, accountHolderName, currency }
+        )
+        if ((amountGBP || 0) > 0 && (amountGBP as number) < 500) {
+          await withdrawalsService.confirmWithdrawal(withdrawalId)
+          toast({
+            title: "Auto-completed",
+            description: "Le virement Wise (< £500) a été confirmé automatiquement.",
+          })
+          console.log('[Admin Withdrawals] Wise auto-completed', { withdrawalId })
+        }
+        toast({
+          title: "Wise Transfer Initiated",
+          description: "Le virement Wise a été initié.",
+        })
+      } else {
+        // Fallback to confirmation for other methods
+        await withdrawalsService.confirmWithdrawal(withdrawalId);
+        toast({
+          title: "Demande confirmée",
+          description: "Le retrait a été marqué comme confirmé.",
+        });
+      }
       loadWithdrawals();
     } catch (error) {
+      console.error('Withdrawal confirmation error:', error);
       toast({
         title: "Erreur",
-        description: "Impossible de confirmer le retrait.",
+        description: error instanceof Error ? error.message : "Impossible de confirmer le retrait.",
         variant: "destructive",
       });
     }
@@ -307,7 +391,7 @@ const Withdrawals = () => {
                   </div>
                 </div>
                 <div className="text-sm text-gray-600">
-                  Méthode: {getMethodBadge(withdrawal.method)}
+                  Méthode: {getMethodBadge(resolveMethod(withdrawal) || withdrawal.method)}
                 </div>
               </CardContent>
             </Card>
@@ -393,6 +477,88 @@ const Withdrawals = () => {
               </CardContent>
             </Card>
 
+            {/* Stripe Connect Information */}
+            {resolveMethod(withdrawal) === "stripe_connect" && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <CreditCard className="h-5 w-5" />
+                    Stripe Connect Information
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div>
+                    <Label className="text-sm font-medium text-gray-600">Stripe Account ID</Label>
+                    <p className="font-mono text-sm bg-gray-100 p-2 rounded">
+                      {withdrawal.externalReference || 'Not connected'}
+                    </p>
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-600">Transfer Status</Label>
+                    <Badge 
+                      className={
+                        withdrawal.stripeTransferStatus === 'paid' ? 'bg-green-500' :
+                        withdrawal.stripeTransferStatus === 'pending' ? 'bg-yellow-500' :
+                        withdrawal.stripeTransferStatus === 'failed' ? 'bg-red-500' :
+                        'bg-gray-500'
+                      }
+                    >
+                      {withdrawal.stripeTransferStatus || 'Not initiated'}
+                    </Badge>
+                  </div>
+                  {withdrawal.stripeTransferId && (
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Transfer ID</Label>
+                      <p className="font-mono text-xs text-gray-600">{withdrawal.stripeTransferId}</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Wise Transfer Information */}
+            {withdrawal.method === 'wise' && (
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <CreditCard className="h-5 w-5" />
+                    Wise Transfer Information
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div>
+                    <Label className="text-sm font-medium text-gray-600">Wise Transfer Status</Label>
+                    <Badge className={
+                      withdrawal.wiseTransferStatus === 'completed' ? 'bg-green-500' :
+                      withdrawal.wiseTransferStatus === 'processing' ? 'bg-yellow-500' :
+                      withdrawal.wiseTransferStatus === 'failed' ? 'bg-red-500' :
+                      'bg-gray-500'
+                    }>
+                      {withdrawal.wiseTransferStatus || 'Not initiated'}
+                    </Badge>
+                  </div>
+                  {withdrawal.wiseTransferId && (
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Wise Transfer ID</Label>
+                      <p className="font-mono text-xs text-gray-600">{withdrawal.wiseTransferId}</p>
+                    </div>
+                  )}
+                  {withdrawal.wiseQuoteId && (
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Wise Quote ID</Label>
+                      <p className="font-mono text-xs text-gray-600">{withdrawal.wiseQuoteId}</p>
+                    </div>
+                  )}
+                  {withdrawal.wiseRecipientId && (
+                    <div>
+                      <Label className="text-sm font-medium text-gray-600">Wise Recipient ID</Label>
+                      <p className="font-mono text-xs text-gray-600">{withdrawal.wiseRecipientId}</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             {/* Actions */}
             <Card>
               <CardHeader>
@@ -402,12 +568,20 @@ const Withdrawals = () => {
                 {withdrawal.status === "pending" && (
                   <>
                     <Button 
-                      onClick={() => handleConfirm(withdrawal.id)}
-                      className="w-full bg-blue-600 hover:bg-blue-700"
+                      onClick={() => handleConfirm(withdrawal.id, withdrawal.externalReference, resolveMethod(withdrawal) || withdrawal.method, (withdrawal as any)?.amount)}
+                      className="w-full bg-green-600 hover:bg-green-700"
+                      disabled={resolveMethod(withdrawal) === 'stripe_connect' && !withdrawal.externalReference}
                     >
                       <Check className="h-4 w-4 mr-2" />
-                      Confirmer la demande
+                      {resolveMethod(withdrawal) === 'stripe_connect' ? 'Process Transfer' : (resolveMethod(withdrawal) === 'wise' || resolveMethod(withdrawal) === 'bank_transfer') ? 'Process Wise Transfer' : 'Confirmer la demande'}
                     </Button>
+                    
+                    {resolveMethod(withdrawal) === 'stripe_connect' && !withdrawal.externalReference && (
+                      <p className="text-xs text-yellow-600 bg-yellow-50 p-2 rounded">
+                        <AlertTriangle className="h-3 w-3 inline mr-1" />
+                        Stripe Connect account required for processing
+                      </p>
+                    )}
                     
                     <RejectDialog 
                       withdrawalId={withdrawal.id}
@@ -695,14 +869,15 @@ const Withdrawals = () => {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Demande</TableHead>
-                  <TableHead className="hidden md:table-cell">Utilisateur</TableHead>
-                  
-                  <TableHead>Montant</TableHead>
-                  <TableHead className="hidden lg:table-cell">Méthode</TableHead>
-                  <TableHead>Statut</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
+                    <TableHead>Demande</TableHead>
+                    <TableHead className="hidden md:table-cell">Utilisateur</TableHead>
+                    
+                    <TableHead>Montant</TableHead>
+                    <TableHead className="hidden lg:table-cell">Méthode</TableHead>
+                    <TableHead>Statut</TableHead>
+                    <TableHead className="hidden xl:table-cell">Transfer</TableHead>
+                    <TableHead>Actions</TableHead>
+                  </TableRow>
               </TableHeader>
               <TableBody>
                 {paginatedWithdrawals.map((withdrawal) => (
@@ -733,6 +908,31 @@ const Withdrawals = () => {
                       {getMethodBadge(withdrawal.paymentMethod)}
                     </TableCell>
                     <TableCell>{getStatusBadge(withdrawal.status)}</TableCell>
+                    <TableCell className="hidden xl:table-cell">
+                      {resolveMethod(withdrawal) === 'stripe_connect' && (
+                        <div className="flex items-center gap-2">
+                          {withdrawal.stripeTransferStatus ? (
+                            <Badge 
+                              className={
+                                withdrawal.stripeTransferStatus === 'paid' ? 'bg-green-500' :
+                                withdrawal.stripeTransferStatus === 'pending' ? 'bg-yellow-500' :
+                                withdrawal.stripeTransferStatus === 'failed' ? 'bg-red-500' :
+                                'bg-gray-500'
+                              }
+                            >
+                              {withdrawal.stripeTransferStatus}
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline">Not initiated</Badge>
+                          )}
+                          {withdrawal.externalReference && (
+                            <span className="text-xs text-gray-500">
+                              ID: {withdrawal.externalReference.substring(0, 8)}...
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         <WithdrawalDetailsModal withdrawal={withdrawal} />
@@ -758,8 +958,8 @@ const Withdrawals = () => {
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
                                   <AlertDialogCancel>Annuler</AlertDialogCancel>
-                                  <AlertDialogAction onClick={() => handleConfirm(withdrawal.id)}>
-                                    Confirmer
+                                  <AlertDialogAction onClick={() => handleConfirm(withdrawal.id, withdrawal.externalReference, resolveMethod(withdrawal) || withdrawal.method)}>
+                                    {resolveMethod(withdrawal) === 'stripe_connect' ? 'Process Transfer' : 'Confirmer'}
                                   </AlertDialogAction>
                                 </AlertDialogFooter>
                               </AlertDialogContent>

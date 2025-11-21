@@ -14,6 +14,7 @@ import {
   Shield,
   Wallet,
   Star,
+  RefreshCw,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -95,6 +96,12 @@ const AdminSidebar = ({ onItemClick }: AdminSidebarProps) => {
       title: 'Retraits',
       icon: CreditCard,
       href: '/admin/withdrawals',
+      permission: 'manage_transactions',
+    },
+    {
+      title: 'Remboursements',
+      icon: RefreshCw,
+      href: '/admin/refunds',
       permission: 'manage_transactions',
     },
   ]

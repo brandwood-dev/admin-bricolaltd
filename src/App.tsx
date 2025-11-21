@@ -17,6 +17,7 @@ import Bookings from "./pages/admin/Bookings";
 import Disputes from "./pages/admin/Disputes";
 import Contacts from "./pages/admin/Contacts";
 import Withdrawals from "./pages/admin/Withdrawals";
+import RefundsManagement from "./pages/admin/RefundsManagement";
 import AdminLogin from "./pages/admin/Login";
 import Profile from "./pages/admin/Profile";
 // import Analytics from "./pages/admin/Analytics"; // removed after merge
@@ -116,6 +117,14 @@ const App = () => (
                 element={
                   <ProtectedRoute requiredPermission="manage_transactions">
                     <Withdrawals />
+                  </ProtectedRoute>
+                } 
+              />
+              <Route 
+                path="refunds" 
+                element={
+                  <ProtectedRoute requiredPermission="manage_transactions">
+                    <RefundsManagement />
                   </ProtectedRoute>
                 } 
               />

@@ -133,8 +133,10 @@ export class ToolsService {
   }
 
   // Delete a tool
-  async deleteTool(id: string): Promise<ApiResponse<void>> {
-    return await apiClient.delete<void>(`/admin/tools/${id}`);
+  async deleteTool(id: string, reason?: string): Promise<ApiResponse<void>> {
+    return await apiClient.delete<void>(`/admin/tools/${id}`, { 
+      data: { reason } 
+    });
   }
 
   // Archive a tool

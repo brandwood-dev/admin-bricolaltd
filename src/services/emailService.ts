@@ -122,7 +122,7 @@ export class EmailService {
         console.error('[EmailService] Erreur de configuration:', error.message);
       }
       
-      throw new Error('Échec de l\'envoi de l\'email');
+      return false; // Return false instead of throwing error
     }
   }
 }

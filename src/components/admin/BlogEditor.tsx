@@ -19,9 +19,10 @@ import {
 } from '@/components/ui/select'
 import { Card, CardContent } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
-import { Save, Eye, Loader2, AlertCircle, Edit3 } from 'lucide-react'
-import RichTextEditor from '@/components/ui/RichTextEditor'
-import { newsService } from '../../services/newsService'
+import { Save, Loader2, AlertCircle, Edit3 } from 'lucide-react'
+import SectionEditor from '@/components/admin/SectionEditor'
+import { newsService } from '@/services/newsService'
+import { IntelligentArticleSaver } from './IntelligentArticleSaver'
 import { useToast } from '@/hooks/use-toast'
 
 interface BlogEditorProps {
@@ -30,15 +31,42 @@ interface BlogEditorProps {
   onClose: () => void
 }
 
+interface Paragraph {
+  id: string;
+  content: string;
+  orderIndex: number;
+}
+
+interface SectionImage {
+  id: string;
+  url: string;
+  alt?: string;
+  orderIndex: number;
+}
+
+interface Section {
+  id: string;
+  title: string;
+  orderIndex: number;
+  paragraphs: Paragraph[];
+  images: SectionImage[];
+}
+
 const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
   const [title, setTitle] = useState('')
   const [summary, setSummary] = useState('')
-  const [content, setContent] = useState('')
+  const [sections, setSections] = useState<Section[]>([])
+  const [pendingImages, setPendingImages] = useState<Array<{
+    sectionId: string;
+    file: File;
+    tempImageId: string;
+    alt?: string;
+  }>>([])
   const [imageUrl, setImageUrl] = useState('')
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [category, setCategory] = useState('')
   const [isPublic, setIsPublic] = useState(true)
-  const [isFeatured, setIsFeatured] = useState(false)
+
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<{ [key: string]: string }>({})
   const { toast } = useToast()
@@ -50,38 +78,18 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
 
   // Catégories statiques (enregistrer le nom)
   const categories = [
-    'Technologie',
-    'Bricolage',
     'Jardinage',
-    'Décoration',
+    'Entretien',
+    'Transport',
+    'Bricolage',
     'Électricité',
-    'Plomberie',
-    'Menuiserie',
+    'Éclairage',
     'Peinture',
-  ]
-
-  const quillModules = {
-    toolbar: [
-      [{ header: [1, 2, 3, false] }],
-      ['bold', 'italic', 'underline', 'strike'],
-      [{ list: 'ordered' }, { list: 'bullet' }],
-      ['blockquote', 'code-block'],
-      ['link', 'image'],
-      ['clean'],
-    ],
-  }
-
-  const quillFormats = [
-    'header',
-    'bold',
-    'italic',
-    'underline',
-    'strike',
-    'list',
-    'blockquote',
-    'code-block',
-    'link',
-    'image',
+    'Construction',
+    'Plantes',
+    'Nettoyage',
+    'Décoration',
+    'Guide',
   ]
 
   // Autosave brouillon local
@@ -94,10 +102,9 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
           const draft = JSON.parse(saved)
           setTitle(draft.title || '')
           setSummary(draft.summary || '')
-          setContent(draft.content || '')
+          setSections(draft.sections || [])
           setCategory(draft.category || '')
           setIsPublic(draft.isPublic ?? true)
-          setIsFeatured(draft.isFeatured ?? false)
         }
       } catch {}
     }
@@ -108,15 +115,14 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
     const payload = {
       title,
       summary,
-      content,
+      sections,
       category,
       isPublic,
-      isFeatured,
     }
     try {
       localStorage.setItem(DRAFT_KEY, JSON.stringify(payload))
     } catch {}
-  }, [title, summary, content, category, isPublic, isFeatured, isOpen])
+  }, [title, summary, sections, category, isPublic, isOpen])
 
   // Confirmation avant fermeture si modifications non enregistrées
   const requestClose = () => {
@@ -131,44 +137,67 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
 
   useEffect(() => {
     if (article) {
+      console.log('BlogEditor - Loading article:', article)
+      console.log('BlogEditor - Article sections:', article.sections)
+      console.log('BlogEditor - Number of sections:', article.sections?.length)
+      
       setTitle(article.title || '')
       setSummary(article.summary || '')
-      setContent(article.content || '')
+      // Convertir le contenu HTML en sections si nécessaire
+      if (article.sections && article.sections.length > 0) {
+        console.log('BlogEditor - Setting sections from article:', article.sections)
+        setSections(article.sections)
+      } else if (article.content) {
+        // Convertir le contenu HTML existant en une section par défaut
+        const defaultSection: Section = {
+          id: 'section-1',
+          title: 'Contenu principal',
+          orderIndex: 0,
+          paragraphs: [{ id: 'para-1', content: article.content, orderIndex: 0 }],
+          images: []
+        }
+        console.log('BlogEditor - Creating default section from content:', defaultSection)
+        setSections([defaultSection])
+      } else {
+        console.log('BlogEditor - No sections or content found, setting empty sections')
+        setSections([])
+      }
       setImageUrl(article.imageUrl || '')
       // Utiliser le nom si présent
       setCategory(article.category || '')
       setIsPublic(article.isPublic ?? true)
-      setIsFeatured(article.isFeatured ?? false)
     } else {
+      console.log('BlogEditor - No article provided, resetting form')
       setTitle('')
       setSummary('')
-      setContent('')
+      setSections([])
       setImageUrl('')
       setSelectedFiles([])
       setCategory('')
       setIsPublic(true)
-      setIsFeatured(false)
     }
     setErrors({})
   }, [article, isOpen])
 
   useEffect(() => {
     const trimmedTitle = title.trim()
-    const trimmedContent = content.trim()
+    const hasContent = sections.some(section => 
+      section.paragraphs.some(para => para.content.trim().length > 0) ||
+      section.images.some(img => img.url.trim().length > 0)
+    )
     const hasFieldErrors = Object.keys(errors).length > 0
     const basicInvalid =
       !trimmedTitle ||
       trimmedTitle.length < 5 ||
       trimmedTitle.length > 200 ||
-      !trimmedContent ||
-      trimmedContent.length < 50 ||
+      !hasContent ||
       !category
     setCanSubmit(!hasFieldErrors && !basicInvalid)
     setIsDirty(
       !!(
         trimmedTitle ||
         summary ||
-        trimmedContent ||
+        sections.length > 0 ||
         imageUrl ||
         category ||
         selectedFiles.length
@@ -177,10 +206,9 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
   }, [
     title,
     summary,
-    content,
+    sections,
     imageUrl,
     category,
-    selectedFiles,
     errors,
   ])
 
@@ -195,10 +223,21 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
       fieldErrors.title = 'Le titre ne peut pas dépasser 200 caractères'
     }
 
-    if (!content || content.trim().length === 0 || content === '<p><br></p>') {
-      fieldErrors.content = 'Le contenu est obligatoire'
-    } else if (content.trim().length < 50) {
-      fieldErrors.content = 'Le contenu doit contenir au moins 50 caractères'
+    const hasContent = sections.some(section => 
+      section.paragraphs.some(para => para.content.trim().length > 0) ||
+      section.images.some(img => img.url.trim().length > 0)
+    )
+    if (!hasContent) {
+      fieldErrors.sections = 'Le contenu est obligatoire (au moins une section avec du contenu)'
+    } else {
+      const totalContentLength = sections.reduce((total, section) => 
+        total + section.paragraphs.reduce((paraTotal, para) => 
+          paraTotal + para.content.trim().length, 0
+        ), 0
+      )
+      if (totalContentLength < 50) {
+        fieldErrors.sections = 'Le contenu doit contenir au moins 50 caractères au total'
+      }
     }
 
     if (!category) {
@@ -261,16 +300,244 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
     })
   }
 
-  const handleContentChange = (value: string) => {
-    setContent(value)
-    const fieldErrors = validateField('content', value)
+  const handleSectionsChange = (newSections: Section[]) => {
+    setSections(newSections)
+    // Validation du contenu des sections
+    const hasContent = newSections.some(section => 
+      section.paragraphs.some(para => para.content.trim().length > 0) ||
+      section.images.some(img => img.url.trim().length > 0)
+    )
     setErrors((prev) => {
       const newErrors = { ...prev }
-      if (fieldErrors.content) newErrors.content = fieldErrors.content
-      else delete newErrors.content
+      if (!hasContent) {
+        newErrors.sections = 'Le contenu est obligatoire (au moins une section avec du contenu)'
+      } else {
+        delete newErrors.sections
+      }
       return newErrors
     })
   }
+
+  // New method to handle bulk image uploads after article save
+  const handleBulkImageUploads = async (savedArticle: any, pendingImages: any[]) => {
+    if (!pendingImages.length) return;
+    
+    console.log(`[BlogEditor] Processing ${pendingImages.length} pending image uploads`);
+    const uploadPromises = [];
+    
+    for (const pendingImage of pendingImages) {
+      const { sectionId, file, alt, tempImageId } = pendingImage;
+      
+      console.log(`[BlogEditor] Uploading image for section ${sectionId}:`, {
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
+        tempImageId
+      });
+      
+      uploadPromises.push(
+        newsService.uploadSectionImage(sectionId, file, alt)
+          .then(response => {
+            console.log(`[BlogEditor] Image uploaded successfully for section ${sectionId}:`, response.data?.url);
+            return { success: true, sectionId, tempImageId, url: response.data?.url };
+          })
+          .catch(error => {
+            console.error(`[BlogEditor] Failed to upload image for section ${sectionId}:`, error);
+            return { success: false, sectionId, tempImageId, error };
+          })
+      );
+    }
+    
+    const results = await Promise.allSettled(uploadPromises);
+    const successful = results.filter(r => r.status === 'fulfilled' && r.value.success).length;
+    const failed = results.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.success)).length;
+    
+    console.log(`[BlogEditor] Bulk upload completed: ${successful} successful, ${failed} failed`);
+    
+    // Update sections with real URLs for successful uploads
+    const successfulUploads = results
+      .filter(r => r.status === 'fulfilled' && r.value.success)
+      .map(r => (r as any).value);
+    
+    if (successfulUploads.length > 0) {
+      setSections(prevSections => {
+        const updatedSections = [...prevSections];
+        
+        successfulUploads.forEach((upload: any) => {
+          const sectionIndex = updatedSections.findIndex(s => s.id === upload.sectionId);
+          if (sectionIndex !== -1) {
+            const updatedSection = { ...updatedSections[sectionIndex] };
+            const imageIndex = updatedSection.images.findIndex(img => img.id === upload.tempImageId);
+            if (imageIndex !== -1) {
+              updatedSection.images[imageIndex] = { 
+                ...updatedSection.images[imageIndex], 
+                url: upload.url 
+              };
+            }
+            updatedSections[sectionIndex] = updatedSection;
+          }
+        });
+        
+        return updatedSections;
+      });
+    }
+    
+    // Remove failed uploads
+    const failedUploads = results
+      .filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.success))
+      .map(r => r.status === 'fulfilled' ? (r as any).value : null)
+      .filter(Boolean);
+    
+    if (failedUploads.length > 0) {
+      setSections(prevSections => {
+        const updatedSections = [...prevSections];
+        
+        failedUploads.forEach((upload: any) => {
+          const sectionIndex = updatedSections.findIndex(s => s.id === upload.sectionId);
+          if (sectionIndex !== -1) {
+            const updatedSection = { ...updatedSections[sectionIndex] };
+            updatedSection.images = updatedSection.images.filter(img => img.id !== upload.tempImageId);
+            updatedSections[sectionIndex] = updatedSection;
+          }
+        });
+        
+        return updatedSections;
+      });
+    }
+    
+    if (failed > 0) {
+      toast({
+        title: 'Téléversement partiel',
+        description: `${successful} images téléversées avec succès, ${failed} ont échoué`,
+        variant: 'destructive',
+      });
+    } else {
+      toast({
+        title: 'Téléversement terminé',
+        description: `${successful} images téléversées avec succès`,
+        variant: 'default',
+      });
+    }
+  };
+
+  const handleImageQueue = (sectionId: string, file: File, tempImageId: string, alt?: string) => {
+    console.log(`[BlogEditor] Queuing image for section ${sectionId}:`, {
+      tempImageId,
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type,
+      alt
+    });
+    
+    setPendingImages(prev => [...prev, {
+      sectionId,
+      file,
+      tempImageId,
+      alt
+    }]);
+  };
+
+  const handleSequentialSave = async (isDraft: boolean = false) => {
+    try {
+      // Prepare the data for intelligent saver
+      const saverData = {
+        title,
+        summary: summary.trim() || undefined,
+        category: category || undefined,
+        isPublic: isDraft ? false : isPublic,
+        coverImageFile: selectedFiles?.[0],
+        sections: sections.map(section => ({
+          ...section,
+          images: section.images.map(img => ({
+            ...img,
+            file: img.file // Include the file for upload
+          }))
+        })),
+        existingArticleId: article?.id
+      };
+
+      console.log('[BlogEditor] Starting intelligent save with data:', {
+        title: saverData.title,
+        sectionsCount: saverData.sections.length,
+        hasCoverImage: !!saverData.coverImageFile,
+        isUpdate: !!saverData.existingArticleId
+      });
+
+      // Use the new IntelligentArticleSaver component
+      // We'll create a modal or integrate it into the existing flow
+      // For now, let's use a simpler approach - call the intelligent save directly
+      await performIntelligentSave(saverData);
+      
+    } catch (error: any) {
+      console.error('[BlogEditor] Intelligent save error:', error);
+      toast({
+        title: 'Erreur',
+        description: error.message || 'Échec de la sauvegarde intelligente',
+        variant: 'destructive'
+      });
+    }
+  };
+
+  const performIntelligentSave = async (data: any) => {
+    setLoading(true);
+    setProgressStep('Préparation de la sauvegarde intelligente...');
+    
+    try {
+      // Use the IntelligentArticleSaver service
+      const { intelligentArticleService } = await import('@/services/intelligentArticleService');
+      
+      const result = await intelligentArticleService.performIntelligentSave({
+        articleId: data.existingArticleId,
+        title: data.title,
+        summary: data.summary,
+        category: data.category,
+        isPublic: data.isPublic,
+        coverImageFile: data.coverImageFile,
+        sections: data.sections,
+        onProgress: (step: string) => {
+          setProgressStep(step);
+        }
+      });
+
+      if (result.success) {
+        toast({
+          title: 'Succès',
+          description: data.existingArticleId ? 'Article mis à jour avec succès' : 'Article créé avec succès',
+          variant: 'default'
+        });
+        
+        // Clear draft and close
+        try {
+          localStorage.removeItem(DRAFT_KEY);
+        } catch {}
+        onClose();
+      } else {
+        throw new Error(result.error || 'Échec de la sauvegarde intelligente');
+      }
+      
+    } catch (error) {
+      setProgressStep('');
+      setLoading(false);
+      throw error;
+    }
+  };
+
+  const handleSectionImageUpload = async (sectionId: string, file: File, alt?: string): Promise<{ url: string }> => {
+    // Instead of uploading immediately, create a temporary image and queue for later upload
+    const tempImageId = `temp-upload-${Date.now()}`;
+    const tempUrl = URL.createObjectURL(file);
+    
+    console.log(`[BlogEditor] Creating temporary image for section ${sectionId}:`, {
+      tempImageId,
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type,
+      tempUrl
+    });
+    
+    // Return the temporary URL immediately
+    return { url: tempUrl };
+  };
 
   const handleSave = async (isDraft: boolean = false) => {
     try {
@@ -288,67 +555,13 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
         return
       }
 
-      setErrors({})
-      setProgressStep('Préparation des données…')
-      const newsData: any = {
-        title: title.trim(),
-        content: content.trim(),
-        isPublic: isDraft ? false : isPublic,
-        isFeatured: isFeatured,
-      }
-      if (summary.trim()) newsData.summary = summary.trim()
-      if (category) newsData.category = category
-
-      // Construire les fichiers à envoyer: 1er = image de couverture
-      const filesToSend: File[] = []
-      if (selectedFiles && selectedFiles.length > 0) {
-        filesToSend.push(selectedFiles[0])
-      }
-
-      setProgressStep(
-        article?.id ? 'Mise à jour en cours…' : 'Création en cours…'
-      )
-      let response
-      if (article?.id) {
-        // Si une nouvelle image de couverture est fournie, activer le remplacement côté service
-        if (selectedFiles && selectedFiles.length > 0) {
-          newsData.replaceMainImage = true
-          console.log('[BlogEditor] Envoi mise à jour avec remplacement image', {
-            replaceMainImage: newsData.replaceMainImage,
-            filesCount: filesToSend.length,
-            fileName: filesToSend[0]?.name,
-            fileType: filesToSend[0]?.type,
-            fileSizeMB: filesToSend[0] ? (filesToSend[0].size / (1024 * 1024)).toFixed(2) : undefined,
-          })
-        }
-        response = await newsService.updateNews(
-          article.id,
-          newsData,
-          filesToSend
-        )
-      } else {
-        response = await newsService.createNews(newsData, filesToSend)
-      }
-
-      setProgressStep('Finalisation…')
-      if (response?.data) {
-        toast({
-          title: 'Succès',
-          description: article?.id
-            ? 'Article mis à jour avec succès'
-            : 'Article créé avec succès',
-          variant: 'default',
-        })
-        setProgressStep('')
-        try {
-          localStorage.removeItem(DRAFT_KEY)
-        } catch {}
-        onClose()
-      } else {
-        throw new Error('Format de réponse API inattendu')
-      }
+      // Use the intelligent save system
+      await handleSequentialSave(isDraft);
+      
     } catch (error: any) {
       setProgressStep('')
+      setLoading(false)
+      
       const apiErrors = error?.response?.data?.errors
       if (apiErrors && typeof apiErrors === 'object') {
         const mapped: { [key: string]: string } = {}
@@ -379,8 +592,6 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
         description: errorMessage,
         variant: 'destructive',
       })
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -573,23 +784,13 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
                     )}
                   </div>
 
-                  <div className='grid grid-cols-2 gap-2'>
-                    <div className='flex items-center space-x-2'>
-                      <Switch
-                        id='isPublic'
-                        checked={isPublic}
-                        onCheckedChange={setIsPublic}
-                      />
-                      <Label htmlFor='isPublic'>Article public</Label>
-                    </div>
-                    <div className='flex items-center space-x-2'>
-                      <Switch
-                        id='isFeatured'
-                        checked={isFeatured}
-                        onCheckedChange={setIsFeatured}
-                      />
-                      <Label htmlFor='isFeatured'>Article en vedette</Label>
-                    </div>
+                  <div className='flex items-center space-x-2'>
+                    <Switch
+                      id='isPublic'
+                      checked={isPublic}
+                      onCheckedChange={setIsPublic}
+                    />
+                    <Label htmlFor='isPublic'>Article public</Label>
                   </div>
                 </CardContent>
               </Card>
@@ -602,22 +803,20 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
                   <Label>Contenu de l'article *</Label>
                   <div
                     className={`border rounded-lg ${
-                      errors.content ? 'border-red-500' : ''
+                      errors.sections ? 'border-red-500' : ''
                     }`}
                   >
-                    <RichTextEditor
-                      value={content}
-                      onChange={handleContentChange}
-                      modules={quillModules}
-                      formats={quillFormats}
-                      placeholder='Rédigez le contenu de votre article...'
-                      style={{ minHeight: '400px' }}
+                    <SectionEditor
+                      sections={sections}
+                      onSectionsChange={handleSectionsChange}
+                      onImageUpload={handleSectionImageUpload}
+                      onImageQueue={handleImageQueue}
                     />
                   </div>
-                  {errors.content && (
+                  {errors.sections && (
                     <div className='flex items-center gap-1 text-red-500 text-sm'>
                       <AlertCircle className='h-4 w-4' />
-                      <span>{errors.content}</span>
+                      <span>{errors.sections}</span>
                     </div>
                   )}
                 </div>
@@ -640,18 +839,9 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
             <div className='flex flex-col sm:flex-row gap-2 sm:gap-3 order-1 sm:order-2 sm:ml-auto'>
               <Button
                 variant='outline'
-                className='w-full sm:w-auto order-3 sm:order-1'
-              >
-                <Eye className='h-4 w-4 mr-2' />
-                <span className='hidden sm:inline'>Aperçu</span>
-                <span className='sm:hidden'>Voir</span>
-              </Button>
-
-              <Button
-                variant='outline'
-                onClick={() => handleSave(true)}
+                onClick={() => handleSequentialSave(true)}
                 disabled={loading || !canSubmit}
-                className='border-orange-200 text-orange-700 hover:bg-orange-50 w-full sm:w-auto order-2 sm:order-2'
+                className='border-orange-200 text-orange-700 hover:bg-orange-50 w-full sm:w-auto order-2 sm:order-1'
               >
                 {loading ? (
                   <>
@@ -671,9 +861,9 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
               </Button>
 
               <Button
-                onClick={() => handleSave(false)}
+                onClick={() => handleSequentialSave(false)}
                 disabled={loading || !canSubmit}
-                className='bg-primary hover:bg-primary-hover w-full sm:w-auto order-1 sm:order-3'
+                className='bg-primary hover:bg-primary-hover w-full sm:w-auto order-1 sm:order-2'
               >
                 {loading ? (
                   <>

@@ -134,7 +134,10 @@ class UserService {
   }
 
   async suspendUser(id: string, reason: string): Promise<ApiResponse<User>> {
-    return await apiClient.post<User>(`/users/${id}/suspend`, { reason });
+    console.log(`🔄 Admin Service: Suspending user ${id} with reason: ${reason}`);
+    const response = await apiClient.post<User>(`/users/${id}/suspend`, { reason });
+    console.log(`🔄 Admin Service: Suspension response:`, response);
+    return response;
   }
 
   async banUser(id: string, reason: string, permanent?: boolean): Promise<ApiResponse<User>> {

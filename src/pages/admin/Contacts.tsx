@@ -207,7 +207,7 @@ const Contacts: React.FC = () => {
       new: { label: 'Nouveau', variant: 'destructive' },
       in_progress: { label: 'En cours', variant: 'default' },
       waiting: { label: 'En attente', variant: 'secondary' },
-      closed: { label: 'Fermé', variant: 'outline' },
+      closed: { label: 'Traité', variant: 'outline' },
     }
     const config = statusConfig[status] || statusConfig.new
     return <Badge variant={config.variant}>{config.label}</Badge>
@@ -229,7 +229,10 @@ const Contacts: React.FC = () => {
     return categoryObj ? categoryObj.label : category
   }
 
-  const handleDeleteContact = async (contactId: string, contactName: string) => {
+  const handleDeleteContact = async (
+    contactId: string,
+    contactName: string
+  ) => {
     try {
       await contactService.deleteContact(contactId)
       toast.success(`Contact ${contactName} supprimé avec succès`)
@@ -279,78 +282,89 @@ const Contacts: React.FC = () => {
   // Fonction pour obtenir le label d'assignation
   const getAssignmentLabel = (value) => {
     const assignmentLabels = {
-      'unassigned': 'Non assigné',
-      'admin1': 'Admin Support',
-      'admin2': 'Tech Support', 
-      'admin3': 'Manager'
+      unassigned: 'Non assigné',
+      admin1: 'Admin Support',
+      admin2: 'Tech Support',
+      admin3: 'Manager',
     }
     return assignmentLabels[value] || 'Non assigné'
   }
 
-  const ContactDetailsModal: React.FC<{ contact: any; isOpen: boolean; onClose: () => void }> = ({ contact, isOpen, onClose }) => {
-    const [response, setResponse] = useState('')
-    const [assignedTo, setAssignedTo] = useState(contact?.assignedTo || 'unassigned')
+  const ContactDetailsModal: React.FC<{
+    contact: any
+    isOpen: boolean
+    onClose: () => void
+  }> = ({ contact, isOpen, onClose }) => {
+    const [response, setResponse] = useState(contact?.response || '')
+    const [assignedTo, setAssignedTo] = useState(
+      contact?.assignedTo || 'unassigned'
+    )
     const [priority, setPriority] = useState(contact?.priority || 'medium')
+    const [isResponseSent, setIsResponseSent] = useState(!!contact?.response)
 
     const handleSendResponse = async () => {
       if (!response.trim()) {
-        toast.error('Veuillez saisir une réponse avant d\'envoyer');
-        return;
+        toast.error("Veuillez saisir une réponse avant d'envoyer")
+        return
       }
 
-      const loadingToast = toast.loading('Envoi de la réponse en cours...');
-      
+      const loadingToast = toast.loading('Envoi de la réponse en cours...')
+
       try {
         // 1. Envoyer l'email au client
-        console.log('[ContactDetailsModal] Envoi de l\'email à:', contact.email);
-        const emailSent = await EmailService.sendContactResponse(
+        console.log("[ContactDetailsModal] Envoi de l'email à:", contact.email)
+        const emailResult = await EmailService.sendContactResponse(
           contact.email,
           `${contact.firstName} ${contact.lastName}`,
           contact.subject,
           response
-        );
+        )
 
-        if (!emailSent) {
-          throw new Error('Échec de l\'envoi de l\'email');
+        if (!emailResult) {
+          throw new Error("Échec de l'envoi de l'email")
         }
 
         // 2. Sauvegarder la réponse en base de données
-        console.log('[ContactDetailsModal] Sauvegarde de la réponse en base');
-        await contactService.sendResponse(contact.id, response);
+        console.log('[ContactDetailsModal] Sauvegarde de la réponse en base')
+        await contactService.sendResponse(contact.id, response)
 
         // 3. Changer le statut à 'in_progress'
-        console.log('[ContactDetailsModal] Changement du statut à in_progress');
-        await contactService.updateContactStatus(contact.id, 'in_progress');
+        console.log('[ContactDetailsModal] Changement du statut à in_progress')
+        await contactService.updateContactStatus(contact.id, 'in_progress')
 
         // 4. Recharger les contacts pour mettre à jour l'interface
-        await loadContacts();
+        await loadContacts()
 
         // 5. Afficher le toast de succès
-        toast.dismiss(loadingToast);
-        toast.success('Réponse envoyée avec succès ! Email envoyé et statut mis à jour.');
-        
-        // 6. Réinitialiser et fermer
-        setResponse('');
-        onClose();
-        
+        toast.dismiss(loadingToast)
+        toast.success(
+          'Réponse envoyée avec succès ! Email envoyé et statut mis à jour.'
+        )
+
+        // 6. Marquer la réponse comme envoyée et garder le contenu pour affichage
+        setIsResponseSent(true)
       } catch (error) {
-        console.error('[ContactDetailsModal] Erreur lors de l\'envoi de la réponse:', error);
-        toast.dismiss(loadingToast);
-        
+        console.error(
+          "[ContactDetailsModal] Erreur lors de l'envoi de la réponse:",
+          error
+        )
+        toast.dismiss(loadingToast)
+
         // Gestion d'erreurs spécifiques
-        let errorMessage = 'Erreur lors de l\'envoi de la réponse';
-        
+        let errorMessage = "Erreur lors de l'envoi de la réponse"
+
         if (error.message?.includes('email')) {
-          errorMessage = 'Erreur lors de l\'envoi de l\'email. Veuillez réessayer.';
+          errorMessage =
+            "Erreur lors de l'envoi de l'email. Veuillez réessayer."
         } else if (error.response?.status === 404) {
-          errorMessage = 'Contact introuvable. Veuillez actualiser la page.';
+          errorMessage = 'Contact introuvable. Veuillez actualiser la page.'
         } else if (error.response?.status === 500) {
-          errorMessage = 'Erreur serveur. Veuillez réessayer plus tard.';
+          errorMessage = 'Erreur serveur. Veuillez réessayer plus tard.'
         } else if (error.response?.data?.message) {
-          errorMessage = error.response.data.message;
+          errorMessage = error.response.data.message
         }
-        
-        toast.error(errorMessage);
+
+        toast.error(errorMessage)
       }
     }
 
@@ -433,14 +447,14 @@ const Contacts: React.FC = () => {
                         </Badge>
                       </div>
                     </div>
-                    <div>
+                    {/* <div>
                       <Label className='text-sm font-medium text-gray-600'>
                         Priorité
                       </Label>
                       <div className='mt-1'>
                         {getPriorityBadge(contact.priority)}
                       </div>
-                    </div>
+                    </div> */}
                     <div>
                       <Label className='text-sm font-medium text-gray-600'>
                         Statut
@@ -503,18 +517,30 @@ const Contacts: React.FC = () => {
                     <Label htmlFor='response'>Votre réponse</Label>
                     <Textarea
                       id='response'
-                      value={contact.response || response}
-                      onChange={(e) => setResponse(e.target.value)}
-                      placeholder='Rédigez votre réponse au client...'
+                      value={
+                        isResponseSent ? response : contact.response || response
+                      }
+                      onChange={(e) =>
+                        !isResponseSent && setResponse(e.target.value)
+                      }
+                      placeholder={
+                        isResponseSent
+                          ? 'Réponse envoyée'
+                          : 'Rédigez votre réponse au client...'
+                      }
                       rows={6}
+                      disabled={isResponseSent}
                     />
                   </div>
-                  {contact.response && (
+                  {(isResponseSent || contact.response) && (
                     <div className='p-4 bg-green-50 border border-green-200 rounded-lg'>
                       <Label className='text-sm font-medium text-green-800'>
-                        Réponse précédente
+                        ✅ Réponse envoyée avec succès
                       </Label>
-                      <p className='text-green-700 mt-1'>{contact.response}</p>
+                      <p className='text-green-700 mt-1'>
+                        L'email a été envoyé au client et la réponse a été
+                        sauvegardée.
+                      </p>
                     </div>
                   )}
                 </CardContent>
@@ -532,10 +558,14 @@ const Contacts: React.FC = () => {
                   <Button
                     onClick={handleSendResponse}
                     className='w-full'
-                    disabled={!response.trim()}
+                    disabled={
+                      !response.trim() || isResponseSent || !!contact.response
+                    }
                   >
                     <Send className='h-4 w-4 mr-2' />
-                    Envoyer réponse
+                    {isResponseSent || contact.response
+                      ? 'Réponse déjà envoyée'
+                      : 'Envoyer réponse'}
                   </Button>
 
                   <div>
@@ -543,13 +573,17 @@ const Contacts: React.FC = () => {
                     <Select
                       value={contact.status}
                       onValueChange={(newStatus) => {
-                        contactService.updateContactStatus(contact.id, newStatus)
+                        contactService
+                          .updateContactStatus(contact.id, newStatus)
                           .then(() => {
                             loadContacts()
                             toast.success('Statut mis à jour avec succès')
                           })
                           .catch((err) => {
-                            console.error('Erreur lors du changement de statut:', err)
+                            console.error(
+                              'Erreur lors du changement de statut:',
+                              err
+                            )
                             toast.error('Erreur lors du changement de statut')
                           })
                       }}
@@ -566,8 +600,6 @@ const Contacts: React.FC = () => {
                   </div>
                 </CardContent>
               </Card>
-
-
             </div>
           </div>
         </DialogContent>
@@ -618,11 +650,6 @@ const Contacts: React.FC = () => {
             Gérez et répondez aux demandes de vos utilisateurs
           </p>
         </div>
-        <DateRangePicker
-          date={dateRange}
-          onDateChange={setDateRange}
-          placeholder='Filtrer par date de création'
-        />
       </div>
 
       {/* Stats cards */}
@@ -657,7 +684,7 @@ const Contacts: React.FC = () => {
           <CardContent className='p-4'>
             <div className='flex items-center justify-between'>
               <div>
-                <p className='text-sm text-gray-600'>Fermées</p>
+                <p className='text-sm text-gray-600'>Traités</p>
                 <p className='text-2xl font-bold text-success'>
                   {contacts.filter((c) => c.status === 'closed').length}
                 </p>
@@ -703,8 +730,7 @@ const Contacts: React.FC = () => {
                 <SelectItem value='all'>Tous les statuts</SelectItem>
                 <SelectItem value='new'>Nouveau</SelectItem>
                 <SelectItem value='in_progress'>En cours</SelectItem>
-                <SelectItem value='waiting'>En attente</SelectItem>
-                <SelectItem value='closed'>Fermé</SelectItem>
+                <SelectItem value='closed'>Traité</SelectItem>
               </SelectContent>
             </Select>
             <Select value={categoryFilter} onValueChange={setCategoryFilter}>
@@ -810,26 +836,31 @@ const Contacts: React.FC = () => {
                           </Button>
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
-                              <Button
-                                variant='destructive'
-                                size='sm'
-                              >
+                              <Button variant='destructive' size='sm'>
                                 <Trash2 className='h-4 w-4 mr-1' />
                                 Supprimer
                               </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
                               <AlertDialogHeader>
-                                <AlertDialogTitle>Confirmer la suppression</AlertDialogTitle>
+                                <AlertDialogTitle>
+                                  Confirmer la suppression
+                                </AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  Êtes-vous sûr de vouloir supprimer le contact de {contact.firstName} {contact.lastName} ?
+                                  Êtes-vous sûr de vouloir supprimer le contact
+                                  de {contact.firstName} {contact.lastName} ?
                                   Cette action est irréversible.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
                                 <AlertDialogCancel>Annuler</AlertDialogCancel>
                                 <AlertDialogAction
-                                  onClick={() => handleDeleteContact(contact.id, `${contact.firstName} ${contact.lastName}`)}
+                                  onClick={() =>
+                                    handleDeleteContact(
+                                      contact.id,
+                                      `${contact.firstName} ${contact.lastName}`
+                                    )
+                                  }
                                   className='bg-red-600 hover:bg-red-700'
                                 >
                                   Supprimer

@@ -146,9 +146,13 @@ const Users = () => {
   const pagination = usePagination<User>(
     'users',
     async (page: number, pageSize: number, filters?: any) => {
-      console.log('🔍 [SEARCH DEBUG] Pagination function called with:', { page, pageSize, filters })
+      console.log('🔍 [SEARCH DEBUG] Pagination function called with:', {
+        page,
+        pageSize,
+        filters,
+      })
       console.log('🔍 [SEARCH DEBUG] Current searchTerm state:', searchTerm)
-      
+
       // Map frontend filters to API parameters according to UserFilterParams interface
       const params: UserFilterParams = {
         page,
@@ -164,10 +168,7 @@ const Users = () => {
             ? false
             : undefined,
         // Map country filter to ISO code or name (backend supports both)
-        country:
-          filters?.country === 'all'
-            ? undefined
-            : filters?.country,
+        country: filters?.country === 'all' ? undefined : filters?.country,
         // Map date range to startDate/endDate
         startDate: filters?.dateFrom,
         endDate: filters?.dateTo,
@@ -177,11 +178,14 @@ const Users = () => {
       }
 
       console.log('🔍 [SEARCH DEBUG] Final API params being sent:', params)
-      console.log('🔍 [SEARCH DEBUG] Search parameter specifically:', params.search)
+      console.log(
+        '🔍 [SEARCH DEBUG] Search parameter specifically:',
+        params.search
+      )
       try {
         const response = await userService.getUsers(params)
         console.log('🔍 [SEARCH DEBUG] API Response received:', response.data)
-        
+
         // Extract pagination data from PaginatedResponse structure
         const responseData = response.data
         const usersData = responseData?.data || []
@@ -217,7 +221,7 @@ const Users = () => {
           message: error.message,
           status: error.response?.status,
           statusText: error.response?.statusText,
-          data: error.response?.data
+          data: error.response?.data,
         })
         throw error
       }
@@ -246,9 +250,22 @@ const Users = () => {
   const refreshUsers = pagination.refresh
 
   // Ensure proper fallback values for pagination data
-  const totalUsers = pagination.pagination?.totalItems ?? pagination.pagination?.total ?? 0
-  const totalPages = pagination.pagination?.totalPages ?? Math.max(1, Math.ceil(totalUsers / (pagination.pagination?.pageSize ?? pagination.pageSize ?? 10)))
-  const currentPage = pagination.pagination?.currentPage ?? pagination.pagination?.page ?? pagination.currentPage ?? 1
+  const totalUsers =
+    pagination.pagination?.totalItems ?? pagination.pagination?.total ?? 0
+  const totalPages =
+    pagination.pagination?.totalPages ??
+    Math.max(
+      1,
+      Math.ceil(
+        totalUsers /
+          (pagination.pagination?.pageSize ?? pagination.pageSize ?? 10)
+      )
+    )
+  const currentPage =
+    pagination.pagination?.currentPage ??
+    pagination.pagination?.page ??
+    pagination.currentPage ??
+    1
 
   // Debug logs for pagination data
   console.log('Pagination debug:', {
@@ -332,12 +349,14 @@ const Users = () => {
       countryFilter,
       dateRange: {
         from: dateRange?.from?.toISOString(),
-        to: dateRange?.to?.toISOString()
-      }
+        to: dateRange?.to?.toISOString(),
+      },
     })
-    
+
     const timeoutId = setTimeout(() => {
-      console.log('🔍 [SEARCH DEBUG] ⏰ Debounce timeout triggered, refreshing data...')
+      console.log(
+        '🔍 [SEARCH DEBUG] ⏰ Debounce timeout triggered, refreshing data...'
+      )
       console.log('🔍 [SEARCH DEBUG] Current filters being applied:', {
         searchTerm,
         statusFilter,
@@ -486,13 +505,18 @@ const Users = () => {
     }
   }
 
-  const handleSuspendUser = async (
-    userId: string,
-    reason: string
-  ) => {
+  const handleSuspendUser = async (userId: string, reason: string) => {
+    console.log('🔄 Admin: Starting user suspension process...')
+    console.log(`🔄 Admin: User ID: ${userId}`)
+    console.log(`🔄 Admin: Suspension reason: ${reason}`)
+    
     try {
+      console.log('🔄 Admin: Calling userService.suspendUser...')
       const response = await userService.suspendUser(userId, reason)
+      console.log('🔄 Admin: Response received:', response)
+      
       if (response.success) {
+        console.log('✅ Admin: User suspended successfully')
         toast({
           title: 'Utilisateur suspendu',
           description:
@@ -501,6 +525,7 @@ const Users = () => {
         setSuspensionReason('')
         pagination.refresh()
       } else {
+        console.log('❌ Admin: Failed to suspend user')
         toast({
           title: 'Erreur',
           description: "Impossible de suspendre l'utilisateur",
@@ -508,7 +533,7 @@ const Users = () => {
         })
       }
     } catch (error) {
-      console.error('Error suspending user:', error)
+      console.error('❌ Admin: Error suspending user:', error)
       toast({
         title: 'Erreur',
         description: "Erreur lors de la suspension de l'utilisateur",
@@ -601,8 +626,19 @@ const Users = () => {
         const header = ['Nom', 'Prénom', 'Email', 'Téléphone', 'Pays', 'Statut']
         const rows = usersList.map((u: any) => {
           const countryName = u.country?.name || ''
-          const status = u.isSuspended ? 'Suspendu' : u.isActive ? 'Actif' : 'Inactif'
-          return [u.lastName || '', u.firstName || '', u.email || '', u.phoneNumber || '', countryName || '', status]
+          const status = u.isSuspended
+            ? 'Suspendu'
+            : u.isActive
+            ? 'Actif'
+            : 'Inactif'
+          return [
+            u.lastName || '',
+            u.firstName || '',
+            u.email || '',
+            u.phoneNumber || '',
+            countryName || '',
+            status,
+          ]
         })
 
         const csv = [header, ...rows]
@@ -613,13 +649,18 @@ const Users = () => {
         const url = window.URL.createObjectURL(blob)
         const link = document.createElement('a')
         link.href = url
-        link.download = `users-export-${new Date().toISOString().split('T')[0]}.csv`
+        link.download = `users-export-${
+          new Date().toISOString().split('T')[0]
+        }.csv`
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
         window.URL.revokeObjectURL(url)
 
-        toast({ title: 'Succès', description: 'Export CSV des utilisateurs téléchargé' })
+        toast({
+          title: 'Succès',
+          description: 'Export CSV des utilisateurs téléchargé',
+        })
         return
       }
 
@@ -629,7 +670,9 @@ const Users = () => {
         const url = window.URL.createObjectURL(response.data)
         const link = document.createElement('a')
         link.href = url
-        link.download = `users-export-${new Date().toISOString().split('T')[0]}.csv`
+        link.download = `users-export-${
+          new Date().toISOString().split('T')[0]
+        }.csv`
         document.body.appendChild(link)
         link.click()
         document.body.removeChild(link)
@@ -682,8 +725,6 @@ const Users = () => {
     "User's Voluntary Request",
     'Abusive Reviews or Comments',
   ]
-
-
 
   const UserDetailsModal = ({ user }: { user: User }) => {
     const [isOpen, setIsOpen] = useState(false)
@@ -1146,7 +1187,7 @@ const Users = () => {
   return (
     <div className='space-y-6'>
       {/* Performance Monitor */}
-      <PerformanceMonitor />
+      {/* <PerformanceMonitor /> */}
 
       {/* Header */}
       <div className='flex flex-col md:flex-row md:items-center md:justify-between gap-4'>
@@ -1300,75 +1341,83 @@ const Users = () => {
             <Table>
               <TableHeader>
                 <TableRow>
-                   <TableHead>Utilisateur</TableHead>
-                   <TableHead className='hidden md:table-cell'>
-                     Téléphone
-                   </TableHead>
-                   <TableHead className='hidden lg:table-cell'>
-                     Pays
-                   </TableHead>
-                   <TableHead>Statut</TableHead>
-                   <TableHead className='hidden lg:table-cell'>
-                     Inscription
-                   </TableHead>
-                   <TableHead>Actions</TableHead>
-                 </TableRow>
+                  <TableHead>Utilisateur</TableHead>
+                  <TableHead className='hidden md:table-cell'>
+                    Téléphone
+                  </TableHead>
+                  <TableHead className='hidden lg:table-cell'>Pays</TableHead>
+                  <TableHead>Statut</TableHead>
+                  <TableHead className='hidden lg:table-cell'>
+                    Inscription
+                  </TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
               </TableHeader>
               <TableBody>
                 {/** debug log removed */}
                 {users
-                  .filter((user) => user.email !== 'admin@bricola.fr' && user.displayName !== 'Admin Bricola')
+                  .filter(
+                    (user) =>
+                      user.email !== 'admin@bricola.fr' &&
+                      user.displayName !== 'Admin Bricola'
+                  )
                   .map((user) => (
-                  <TableRow key={user.id}>
-                    <TableCell>
-                      <div className='flex items-center gap-3'>
-                        <div className='w-10 h-10 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center'>
-                          {user.profilePicture ? (
-                            <img
-                              src={user.profilePicture}
-                              alt={`${user.firstName} ${user.lastName}`}
-                              className='w-full h-full object-cover'
-                            />
-                          ) : (
-                            <span className='text-sm font-medium text-gray-600'>
-                              {user.firstName?.[0]}
-                              {user.lastName?.[0]}
-                            </span>
-                          )}
-                        </div>
-                        <div>
-                          <div className='font-medium'>
-                            {user.firstName} {user.lastName}
+                    <TableRow key={user.id}>
+                      <TableCell>
+                        <div className='flex items-center gap-3'>
+                          <div className='w-10 h-10 rounded-full overflow-hidden bg-gray-100 flex items-center justify-center'>
+                            {user.profilePicture ? (
+                              <img
+                                src={user.profilePicture}
+                                alt={`${user.firstName} ${user.lastName}`}
+                                className='w-full h-full object-cover'
+                              />
+                            ) : (
+                              <span className='text-sm font-medium text-gray-600'>
+                                {user.firstName?.[0]}
+                                {user.lastName?.[0]}
+                              </span>
+                            )}
                           </div>
-                          <div className='text-sm text-gray-500'>
-                            {user.email}
+                          <div>
+                            <div className='font-medium'>
+                              {user.firstName} {user.lastName}
+                            </div>
+                            <div className='text-sm text-gray-500'>
+                              {user.email}
+                            </div>
+                            {user.isAdmin && (
+                              <Badge variant='default' className='mt-1'>
+                                <Shield className='h-3 w-3 mr-1' />
+                                Admin
+                              </Badge>
+                            )}
                           </div>
-                          {user.isAdmin && (
-                            <Badge variant='default' className='mt-1'>
-                              <Shield className='h-3 w-3 mr-1' />
-                              Admin
-                            </Badge>
-                          )}
                         </div>
-                      </div>
-                    </TableCell>
-                    <TableCell className='hidden md:table-cell'>
-                      {(user as any).phoneNumber ?? (user as any).phone ?? '-'}
-                    </TableCell>
-                    <TableCell className='hidden lg:table-cell'>
-                      {getCountryName((user as any).countryId) ?? ((user as any).country && (user as any).country.name) ?? (user as any).countryName ?? '-'}
-                    </TableCell>
-                     <TableCell>{getStatusBadge(user)}</TableCell>
-                     <TableCell className='hidden lg:table-cell'>
-                       {new Date(user.createdAt).toLocaleDateString('fr-FR')}
-                     </TableCell>
-                    <TableCell>
-                      <div className='flex items-center gap-2'>
-                        <UserDetailsModal user={user} />
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      </TableCell>
+                      <TableCell className='hidden md:table-cell'>
+                        {(user as any).phoneNumber ??
+                          (user as any).phone ??
+                          '-'}
+                      </TableCell>
+                      <TableCell className='hidden lg:table-cell'>
+                        {getCountryName((user as any).countryId) ??
+                          ((user as any).country &&
+                            (user as any).country.name) ??
+                          (user as any).countryName ??
+                          '-'}
+                      </TableCell>
+                      <TableCell>{getStatusBadge(user)}</TableCell>
+                      <TableCell className='hidden lg:table-cell'>
+                        {new Date(user.createdAt).toLocaleDateString('fr-FR')}
+                      </TableCell>
+                      <TableCell>
+                        <div className='flex items-center gap-2'>
+                          <UserDetailsModal user={user} />
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
               </TableBody>
             </Table>
           </div>
@@ -1385,7 +1434,7 @@ const Users = () => {
               <EnhancedPagination
                 pagination={{
                   currentPage: currentPage,
-                  pageSize: pagination.pageSize ?? 50,
+                  pageSize: pagination.pageSize ?? 10,
                   totalItems: totalUsers,
                   totalPages: totalPages,
                   hasNextPage: currentPage < totalPages,
@@ -1406,7 +1455,6 @@ const Users = () => {
 }
 
 export default Users
-
 
 // Helper functions for transaction type handling
 const getTransactionTypeLabel = (type: TransactionType | string) => {

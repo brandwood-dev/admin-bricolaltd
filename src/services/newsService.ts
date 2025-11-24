@@ -10,11 +10,34 @@ export interface Category {
   updatedAt: string;
 }
 
+// Section interfaces
+export interface Paragraph {
+  id: string;
+  content: string;
+  orderIndex: number;
+}
+
+export interface SectionImage {
+  id: string;
+  url: string;
+  alt?: string;
+  orderIndex: number;
+}
+
+export interface Section {
+  id: string;
+  title: string;
+  orderIndex: number;
+  paragraphs: Paragraph[];
+  images: SectionImage[];
+}
+
 // News interfaces
 export interface News {
   id: string;
   title: string;
-  content: string;
+  content?: string; // Legacy field for backward compatibility
+  sections?: Section[];
   imageUrl?: string;
   isPublic: boolean;
   isFeatured: boolean;
@@ -33,7 +56,8 @@ export interface News {
 
 export interface CreateNewsDto {
   title: string;
-  content: string;
+  content?: string; // Legacy field for backward compatibility
+  sections?: Section[];
   imageUrl?: string;
   isPublic?: boolean;
   isFeatured?: boolean;
@@ -255,6 +279,347 @@ class NewsService {
   // Get all categories
   async getCategories(): Promise<ApiResponse<Category[]>> {
     return await apiClient.get<Category[]>('/categories');
+  }
+
+  // Upload section image
+  async uploadSectionImage(sectionId: string, file: File, alt?: string, orderIndex?: number): Promise<ApiResponse<SectionImage>> {
+    const formData = new FormData();
+    formData.append('image', file);
+    if (alt) formData.append('alt', alt);
+    if (orderIndex !== undefined) formData.append('orderIndex', orderIndex.toString());
+    
+    console.log('[NewsService] Uploading section image:', {
+      sectionId,
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type,
+      hasAlt: !!alt,
+      orderIndex
+    });
+    
+    try {
+      const response = await apiClient.post<SectionImage>(`/news/sections/${sectionId}/images`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      
+      console.log('[NewsService] Upload response:', response);
+      
+      if (response.success && response.data) {
+        console.log('[NewsService] Upload successful, image URL:', response.data.url);
+        return response;
+      } else {
+        throw new Error(response.message || 'Upload failed - no data returned');
+      }
+    } catch (error: any) {
+      console.error('[NewsService] Upload error:', error);
+      
+      // Enhanced error information
+      if (error.response) {
+        console.error('[NewsService] Server responded with:', {
+          status: error.response.status,
+          data: error.response.data,
+          headers: error.response.headers
+        });
+      } else if (error.request) {
+        console.error('[NewsService] No response received:', error.request);
+      } else {
+        console.error('[NewsService] Request setup error:', error.message);
+      }
+      
+      throw error;
+    }
+  }
+
+  // New sequential save methods
+  async uploadCoverImage(file: File): Promise<ApiResponse<{ url: string }>> {
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    console.log('[NewsService] Uploading cover image:', {
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type
+    });
+    
+    try {
+      const response = await apiClient.post<{ url: string }>('/news/upload-cover', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      
+      console.log('[NewsService] Cover image uploaded:', response.data?.data?.url);
+      return response;
+    } catch (error: any) {
+      console.error('[NewsService] Cover image upload error:', error);
+      throw error;
+    }
+  }
+
+  async saveSection(newsId: string, sectionData: any): Promise<ApiResponse<any>> {
+    console.log('[NewsService] Saving section:', {
+      newsId,
+      title: sectionData.title,
+      orderIndex: sectionData.orderIndex
+    });
+    
+    try {
+      const response = await apiClient.post(`/news/${newsId}/sections`, sectionData);
+      console.log('[NewsService] Section saved, full response:', response);
+      console.log('[NewsService] Section saved, response.data:', response.data);
+      console.log('[NewsService] Section saved, response.data.data:', response.data?.data);
+      return response;
+    } catch (error: any) {
+      console.error('[NewsService] Section save error:', error);
+      throw error;
+    }
+  }
+
+  async saveSectionParagraph(sectionId: string, paragraphData: any): Promise<ApiResponse<any>> {
+    console.log('[NewsService] Saving paragraph:', {
+      sectionId,
+      content: paragraphData.content?.substring(0, 50) + '...',
+      orderIndex: paragraphData.orderIndex
+    });
+    
+    try {
+      const response = await apiClient.post(`/news/sections/${sectionId}/paragraphs`, paragraphData);
+      console.log('[NewsService] Paragraph saved:', response.data);
+      return response;
+    } catch (error: any) {
+      console.error('[NewsService] Paragraph save error:', error);
+      throw error;
+    }
+  }
+
+  async saveSectionImageWithUrl(sectionId: string, imageData: { url: string; alt?: string; orderIndex?: number }): Promise<ApiResponse<any>> {
+    console.log('[NewsService] Saving section image with URL:', {
+      sectionId,
+      url: imageData.url,
+      alt: imageData.alt,
+      orderIndex: imageData.orderIndex
+    });
+    
+    try {
+      const response = await apiClient.post(`/news/sections/${sectionId}/images/url`, imageData);
+      console.log('[NewsService] Section image saved with URL:', response.data);
+      return response;
+    } catch (error: any) {
+      console.error('[NewsService] Section image save error:', error);
+      throw error;
+    }
+  }
+
+  // Deprecated method - kept for backward compatibility but throws error
+  async saveSectionImage(sectionId: string, imageData: any): Promise<ApiResponse<any>> {
+    console.log('[NewsService] saveSectionImage called (deprecated):', {
+      sectionId,
+      url: imageData.url,
+      orderIndex: imageData.orderIndex
+    });
+    
+    throw new Error('saveSectionImage is deprecated. Use uploadSectionImage for file uploads or saveSectionImageWithUrl for URL-based images.');
+  }
+
+  // New edit workflow methods
+  async updateSection(sectionId: string, sectionData: { title: string; orderIndex: number }): Promise<ApiResponse<any>> {
+    console.log('[NewsService] Updating section:', {
+      sectionId,
+      title: sectionData.title,
+      orderIndex: sectionData.orderIndex
+    });
+    
+    try {
+      const response = await apiClient.patch(`/sections/${sectionId}`, sectionData);
+      console.log('[NewsService] Section updated:', response.data);
+      return response;
+    } catch (error: any) {
+      console.error('[NewsService] Section update error:', error);
+      throw error;
+    }
+  }
+
+  async deleteSection(sectionId: string): Promise<ApiResponse<any>> {
+    console.log('[NewsService] Deleting section:', sectionId);
+    
+    try {
+      const response = await apiClient.delete(`/sections/${sectionId}`);
+      console.log('[NewsService] Section deleted:', response.data);
+      return response;
+    } catch (error: any) {
+      console.error('[NewsService] Section deletion error:', error);
+      throw error;
+    }
+  }
+
+  async updateParagraph(paragraphId: string, content: string, orderIndex: number, sectionId?: string): Promise<ApiResponse<any>> {
+    console.log('[NewsService] Updating paragraph:', {
+      paragraphId,
+      content: content?.substring(0, 50) + '...',
+      orderIndex,
+      sectionId
+    });
+    
+    try {
+      let actualSectionId = sectionId;
+      
+      // If sectionId is not provided, try to fetch it
+      if (!actualSectionId) {
+        try {
+          const paragraphResponse = await apiClient.get(`/sections/paragraphs/${paragraphId}`);
+          actualSectionId = paragraphResponse.data?.data?.sectionId;
+        } catch (getError) {
+          console.warn('[NewsService] Could not fetch paragraph details, will try direct update');
+        }
+      }
+      
+      if (actualSectionId) {
+        // Use the correct endpoint with section ID
+        const response = await apiClient.patch(`/sections/${actualSectionId}/paragraphs/${paragraphId}`, {
+          content,
+          orderIndex
+        });
+        console.log('[NewsService] Paragraph updated:', response.data);
+        return response;
+      } else {
+        // Fallback: try direct update without section ID (for backwards compatibility)
+        const response = await apiClient.patch(`/sections/paragraphs/${paragraphId}`, {
+          content,
+          orderIndex
+        });
+        console.log('[NewsService] Paragraph updated (fallback):', response.data);
+        return response;
+      }
+    } catch (error: any) {
+      console.error('[NewsService] Paragraph update error:', error);
+      throw error;
+    }
+  }
+
+  async deleteParagraph(paragraphId: string, sectionId?: string): Promise<ApiResponse<any>> {
+    console.log('[NewsService] Deleting paragraph:', paragraphId);
+    
+    try {
+      let actualSectionId = sectionId;
+      
+      // If sectionId is not provided, try to fetch it
+      if (!actualSectionId) {
+        try {
+          const paragraphResponse = await apiClient.get(`/sections/paragraphs/${paragraphId}`);
+          actualSectionId = paragraphResponse.data?.data?.sectionId;
+        } catch (getError) {
+          console.warn('[NewsService] Could not fetch paragraph details, will try direct delete');
+        }
+      }
+      
+      if (actualSectionId) {
+        // Use the correct endpoint with section ID
+        const response = await apiClient.delete(`/sections/${actualSectionId}/paragraphs/${paragraphId}`);
+        console.log('[NewsService] Paragraph deleted:', response.data);
+        return response;
+      } else {
+        // Fallback: try direct delete without section ID (for backwards compatibility)
+        const response = await apiClient.delete(`/sections/paragraphs/${paragraphId}`);
+        console.log('[NewsService] Paragraph deleted (fallback):', response.data);
+        return response;
+      }
+    } catch (error: any) {
+      console.error('[NewsService] Paragraph deletion error:', error);
+      throw error;
+    }
+  }
+
+  async updateSectionImage(imageId: string, url: string, alt?: string, orderIndex?: number): Promise<ApiResponse<any>> {
+    console.log('[NewsService] Updating section image:', {
+      imageId,
+      url,
+      alt,
+      orderIndex
+    });
+    
+    try {
+      // Use the sections service directly - it can update by image ID alone
+      const response = await apiClient.patch(`/sections/images/${imageId}`, {
+        url,
+        alt,
+        orderIndex
+      });
+      console.log('[NewsService] Section image updated:', response.data);
+      return response;
+    } catch (error: any) {
+      console.error('[NewsService] Section image update error:', error);
+      throw error;
+    }
+  }
+
+  async deleteSectionImage(imageId: string, sectionId?: string): Promise<ApiResponse<any>> {
+    console.log('[NewsService] Deleting section image:', imageId);
+    
+    try {
+      // Use the sections service directly - it can delete by image ID alone
+      const response = await apiClient.delete(`/sections/images/${imageId}`);
+      console.log('[NewsService] Section image deleted:', response.data);
+      return response;
+    } catch (error: any) {
+      console.error('[NewsService] Section image deletion error:', error);
+      throw error;
+    }
+  }
+
+  async uploadAndSaveSectionImage(sectionId: string, file: File, alt?: string, orderIndex?: number): Promise<ApiResponse<any>> {
+    console.log('[NewsService] Uploading and saving section image:', {
+      sectionId,
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: file.type,
+      alt,
+      orderIndex
+    });
+    
+    try {
+      // The upload endpoint already uploads the file AND saves the record
+      const uploadResponse = await this.uploadSectionImage(sectionId, file, alt, orderIndex);
+      
+      if (uploadResponse.success && uploadResponse.data) {
+        console.log('[NewsService] Image uploaded and saved successfully:', uploadResponse.data);
+        return uploadResponse;
+      } else {
+        throw new Error('Upload failed or no data returned');
+      }
+    } catch (error: any) {
+      console.error('[NewsService] Image upload and save error:', error);
+      throw error;
+    }
+  }
+
+  // Get sections by article ID
+  async getSectionsByArticle(articleId: string): Promise<ApiResponse<any[]>> {
+    console.log('[NewsService] Getting sections for article:', articleId);
+    
+    try {
+      const response = await apiClient.get(`/sections/article/${articleId}`);
+      console.log('[NewsService] Sections retrieved:', response.data);
+      return response;
+    } catch (error: any) {
+      console.error('[NewsService] Get sections error:', error);
+      throw error;
+    }
+  }
+
+  // Get individual section by ID
+  async getSectionById(sectionId: string): Promise<ApiResponse<any>> {
+    console.log('[NewsService] Getting section by ID:', sectionId);
+    
+    try {
+      const response = await apiClient.get(`/sections/${sectionId}`);
+      console.log('[NewsService] Section retrieved:', response.data);
+      return response;
+    } catch (error: any) {
+      console.error('[NewsService] Get section error:', error);
+      throw error;
+    }
   }
 }
 

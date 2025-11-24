@@ -652,20 +652,25 @@ const ListingDetailsModal = ({
                 <SelectValue placeholder='Sélectionner une raison' />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value='Contenu inapproprié'>
+                <SelectItem value='inappropriate_content'>
                   Contenu inapproprié
                 </SelectItem>
-                <SelectItem value='Photos de mauvaise qualité'>
-                  Photos de mauvaise qualité
+                <SelectItem value='poor_quality_photos'>
+                  Poor Quality Photos
                 </SelectItem>
-                <SelectItem value='Description insuffisante'>
-                  Description insuffisante
+                <SelectItem value='insufficient_description'>
+                  Insufficient Description
                 </SelectItem>
-                <SelectItem value='Prix incorrect'>Prix incorrect</SelectItem>
-                <SelectItem value='Outil non conforme'>
-                  Outil non conforme
+                <SelectItem value='non_compliant_price'>
+                  Non-Compliant Price
                 </SelectItem>
-                <SelectItem value='Autre'>Autre</SelectItem>
+                <SelectItem value='incomplete_information'>
+                  Incomplete Information
+                </SelectItem>
+                <SelectItem value='false_or_misleading_information'>
+                  False or Misleading Information
+                </SelectItem>
+               
               </SelectContent>
             </Select>
           </div>
@@ -724,14 +729,7 @@ const RejectDialog = ({ listingId, onReject }: any) => {
   const [selectedReason, setSelectedReason] = useState('')
   const [customMessage, setCustomMessage] = useState('')
 
-  const rejectionReasons = [
-    'Contenu inapproprié',
-    'Informations incomplètes',
-    'Prix non conforme',
-    'Photos de mauvaise qualité',
-    'Description insuffisante',
-    'Autre (préciser ci-dessous)',
-  ]
+ 
 
   const handleReject = () => {
     const reason =
@@ -769,39 +767,34 @@ const RejectDialog = ({ listingId, onReject }: any) => {
                 <SelectValue placeholder='Sélectionner une raison' />
               </SelectTrigger>
               <SelectContent>
-                {rejectionReasons.map((reason) => (
-                  <SelectItem key={reason} value={reason} className='text-sm'>
-                    {reason}
-                  </SelectItem>
-                ))}
+                <SelectItem value='inappropriate_content'>
+                  Inappropriate Content
+                </SelectItem>
+                <SelectItem value='poor_quality_photos'>
+                  Poor Quality Photos
+                </SelectItem>
+                <SelectItem value='insufficient_description'>
+                  Insufficient Description
+                </SelectItem>
+                <SelectItem value='non_compliant_price'>
+                  Non-Compliant Price
+                </SelectItem>
+                <SelectItem value='incomplete_information'>
+                  Incomplete Information
+                </SelectItem>
+                <SelectItem value='false_or_misleading_information'>
+                  False or Misleading Information
+                </SelectItem>
+             
               </SelectContent>
             </Select>
           </div>
-          {selectedReason === 'Autre (préciser ci-dessous)' && (
-            <div className='space-y-2'>
-              <Label htmlFor='custom-message' className='text-sm font-medium'>
-                Message personnalisé
-              </Label>
-              <Textarea
-                id='custom-message'
-                placeholder='Précisez la raison du rejet...'
-                value={customMessage}
-                onChange={(e) => setCustomMessage(e.target.value)}
-                className='text-sm'
-                rows={3}
-              />
-            </div>
-          )}
         </div>
         <AlertDialogFooter>
           <AlertDialogCancel className='text-sm'>Annuler</AlertDialogCancel>
           <AlertDialogAction
             onClick={handleReject}
-            disabled={
-              !selectedReason ||
-              (selectedReason === 'Autre (préciser ci-dessous)' &&
-                !customMessage.trim())
-            }
+            disabled={!selectedReason}
             className='text-sm'
           >
             Rejeter
@@ -1470,9 +1463,9 @@ const Listings = () => {
   }
 
   // Handle tool deletion
-  const handleDeleteTool = async (toolId: string) => {
+  const handleDeleteTool = async (toolId: string, reason?: string) => {
     try {
-      const response = await toolsService.deleteTool(toolId)
+      const response = await toolsService.deleteTool(toolId, reason)
       if (response.success) {
         toast({
           title: 'Succès',
@@ -1564,7 +1557,7 @@ const Listings = () => {
       })
       return
     }
-    await handleDeleteTool(listingId)
+    await handleDeleteTool(listingId, reason)
   }
 
   // Pagination info

@@ -36,7 +36,6 @@ import {
   Trash2,
   ChevronLeft,
   ChevronRight,
-  Calendar,
   User,
   Clock,
   Tag,
@@ -44,7 +43,6 @@ import {
   FileText,
   Video,
   Loader2,
-  Star,
   Globe,
   EyeOff,
   Filter,
@@ -53,6 +51,7 @@ import { BlogEditor } from '@/components/admin/BlogEditor'
 import { DateRange } from 'react-day-picker'
 import { newsService, News, Category } from '@/services/newsService'
 import { useToast } from '@/hooks/use-toast'
+import ArticlePreviewModal from '@/components/admin/ArticlePreviewModal'
 
 // Using Category interface from newsService
 interface staticCategory {
@@ -80,6 +79,10 @@ const Blog = () => {
   // Delete confirmation states
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [articleToDelete, setArticleToDelete] = useState<News | null>(null)
+
+  // Article preview states
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false)
+  const [articleToPreview, setArticleToPreview] = useState<News | null>(null)
   const [isDeleting, setIsDeleting] = useState(false)
 
   // Loading states for individual actions
@@ -105,9 +108,6 @@ const Blog = () => {
   ]
 
   const getStatusBadge = (article: News) => {
-    if (article.isFeatured) {
-      return <Badge className='bg-yellow-500 text-white'>En vedette</Badge>
-    }
     if (article.isPublic) {
       return <Badge className='bg-green-500 text-white'>Publié</Badge>
     }
@@ -128,7 +128,7 @@ const Blog = () => {
             : statusFilter === 'draft'
             ? false
             : undefined,
-        isFeatured: statusFilter === 'featured' ? true : undefined,
+
         category:
           categoryFilter && categoryFilter !== 'all'
             ? categoryFilter
@@ -203,29 +203,7 @@ const Blog = () => {
     setArticleToDelete(null)
   }
 
-  // Handle toggle featured status
-  const handleToggleFeatured = async (id: string) => {
-    try {
-      setLoadingActions((prev) => ({ ...prev, [`featured-${id}`]: true }))
-      const response = await newsService.toggleFeatured(id)
-      if (response.success) {
-        toast({
-          title: 'Succès',
-          description: 'Statut vedette mis à jour avec succès.',
-        })
-        loadArticles() // Reload articles
-      }
-    } catch (error) {
-      console.error('Error toggling featured status:', error)
-      toast({
-        title: 'Erreur',
-        description: 'Impossible de mettre à jour le statut vedette.',
-        variant: 'destructive',
-      })
-    } finally {
-      setLoadingActions((prev) => ({ ...prev, [`featured-${id}`]: false }))
-    }
-  }
+
 
   // Handle toggle public status
   const handleTogglePublic = async (id: string) => {
@@ -256,8 +234,22 @@ const Blog = () => {
     setIsEditorOpen(true)
   }
 
-  const handleEditArticle = (article: News) => {
-    setEditingArticle(article)
+  const handleEditArticle = async (article: News) => {
+    try {
+      // Fetch complete article details including sections for editing
+      const fullArticleResponse = await newsService.getNewsById(article.id)
+      if (fullArticleResponse.success && fullArticleResponse.data) {
+        // Use the complete article data with sections
+        setEditingArticle(fullArticleResponse.data)
+      } else {
+        // Fallback to basic article data if full fetch fails
+        setEditingArticle(article)
+      }
+    } catch (error) {
+      console.error('Error fetching full article details for edit:', error)
+      // Fallback to basic article data
+      setEditingArticle(article)
+    }
     setIsEditorOpen(true)
   }
 
@@ -271,70 +263,75 @@ const Blog = () => {
     setCurrentPage(1)
   }, [searchTerm, statusFilter, categoryFilter, dateRange])
 
-  const ArticlePreviewModal = ({ article }: { article: News }) => (
-    <Dialog>
-      <DialogTrigger asChild>
-        <Button variant='ghost' size='sm'>
-          <Eye className='h-4 w-4' />
-        </Button>
-      </DialogTrigger>
-      <DialogContent className='max-w-4xl max-h-[90vh] overflow-y-auto'>
-        <DialogHeader>
-          <DialogTitle>Prévisualisation - {article.title}</DialogTitle>
-        </DialogHeader>
+  // Handle article preview
+  const handlePreviewArticle = async (article: News) => {
+    try {
+      // Fetch complete article details including sections
+      const fullArticleResponse = await newsService.getNewsById(article.id)
+      console.log('Full article response:', fullArticleResponse)
+      
+      if (fullArticleResponse.success && fullArticleResponse.data) {
+        // Access the nested data structure - the actual article is in fullArticleResponse.data
+        const completeArticle = fullArticleResponse.data
+        console.log('Complete article data:', completeArticle)
+        console.log('Article sections:', completeArticle.sections)
+        console.log('Number of sections:', completeArticle.sections?.length)
+        
+        setArticleToPreview(completeArticle)
+        setIsPreviewModalOpen(true)
+      } else {
+        console.warn('Failed to fetch complete article, using fallback data')
+        // Fallback to basic article data if full fetch fails
+        setArticleToPreview(article)
+        setIsPreviewModalOpen(true)
+      }
+    } catch (error) {
+      console.error('Error fetching full article details:', error)
+      // Fallback to basic article data
+      setArticleToPreview(article)
+      setIsPreviewModalOpen(true)
+    }
+  }
 
-        <div className='space-y-6'>
-          {/* Cover image */}
-          {article.imageUrl && (
-            <div className='aspect-video bg-gray-100 rounded-lg overflow-hidden'>
-              <img
-                src={article.imageUrl}
-                alt={article.title}
-                className='w-full h-full object-cover'
-              />
-            </div>
-          )}
+  // Handle edit article from preview
+  const handleEditFromPreview = () => {
+    setIsPreviewModalOpen(false)
+    if (articleToPreview) {
+      setEditingArticle(articleToPreview)
+      setIsEditorOpen(true)
+    }
+  }
 
-          {/* Article meta */}
-          <div className='flex flex-wrap gap-4 text-sm text-gray-600'>
-            <div className='flex items-center gap-2'>
-              <Calendar className='h-4 w-4' />
-              {new Date(article.createdAt).toLocaleDateString('fr-FR')}
-            </div>
-            <div className='flex items-center gap-2'>
-              <Clock className='h-4 w-4' />
-              Mis à jour le{' '}
-              {new Date(article.updatedAt).toLocaleDateString('fr-FR')}
-            </div>
-            <div className='flex items-center gap-2'>
-              <Tag className='h-4 w-4' />
-              {categories.find((cat) => cat.id === article.category)?.name ||
-                'Non catégorisé'}
-            </div>
-            {article.isFeatured && (
-              <Badge className='bg-yellow-500 text-white'>En vedette</Badge>
-            )}
-          </div>
-
-          {/* Article summary */}
-          {article.summary && (
-            <div className='bg-gray-50 p-4 rounded-lg'>
-              <h4 className='font-medium mb-2'>Résumé</h4>
-              <p className='text-gray-700'>{article.summary}</p>
-            </div>
-          )}
-
-          {/* Article content */}
-          <div className='prose max-w-none'>
-            <h1 className='text-3xl font-bold text-gray-900 mb-4'>
-              {article.title}
-            </h1>
-            <div dangerouslySetInnerHTML={{ __html: article.content }} />
-          </div>
-        </div>
-      </DialogContent>
-    </Dialog>
-  )
+  // Handle toggle public status from preview
+  const handleTogglePublicFromPreview = async () => {
+    if (!articleToPreview) return
+    
+    try {
+      // Use the dedicated togglePublic endpoint instead of updateNews
+      const updatedArticle = await newsService.togglePublic(articleToPreview.id)
+      
+      // Update the local state
+      setArticles(prev => prev.map(article => 
+        article.id === articleToPreview.id ? updatedArticle.data : article
+      ))
+      
+      // Update the preview article
+      setArticleToPreview(updatedArticle.data)
+      
+      toast({
+        title: 'Succès',
+        description: articleToPreview.isPublic ? 'Article dépublié' : 'Article publié',
+        variant: 'default'
+      })
+    } catch (error) {
+      console.error('Error toggling article status:', error)
+      toast({
+        title: 'Erreur',
+        description: 'Impossible de modifier le statut de l\'article',
+        variant: 'destructive'
+      })
+    }
+  }
 
   return (
     <div className='space-y-6'>
@@ -349,16 +346,9 @@ const Blog = () => {
           </p>
         </div>
         <div className='flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4'>
-          <div className='order-2 sm:order-1 flex-1 sm:flex-none'>
-            <DateRangePicker
-              date={dateRange}
-              onDateChange={setDateRange}
-              placeholder='Filtrer par date de publication'
-            />
-          </div>
           <Button
             onClick={handleCreateArticle}
-            className='order-1 sm:order-2 bg-primary hover:bg-primary-hover w-full sm:w-auto'
+            className='bg-primary hover:bg-primary-hover w-full sm:w-auto'
           >
             <Plus className='h-4 w-4 mr-2' />
             <span className='hidden sm:inline'>Créer un nouvel article</span>
@@ -389,7 +379,7 @@ const Blog = () => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value='all'>Tous les statuts</SelectItem>
-                    <SelectItem value='published'>Public</SelectItem>
+                    <SelectItem value='published'>Publié</SelectItem>
                     <SelectItem value='draft'>Brouillon</SelectItem>
                   </SelectContent>
                 </Select>
@@ -435,9 +425,7 @@ const Blog = () => {
                             Catégorie
                           </TableHead>
                           <TableHead>Public</TableHead>
-                          <TableHead className='hidden md:table-cell'>
-                            En vedette
-                          </TableHead>
+
                           <TableHead className='hidden md:table-cell'>
                             Dates
                           </TableHead>
@@ -448,7 +436,7 @@ const Blog = () => {
                         {paginatedArticles.length === 0 ? (
                           <TableRow>
                             <TableCell
-                              colSpan={6}
+                              colSpan={5}
                               className='text-center py-8 text-gray-500'
                             >
                               Aucun article trouvé
@@ -496,15 +484,7 @@ const Blog = () => {
                                   {article.isPublic ? 'Public' : 'Brouillon'}
                                 </Badge>
                               </TableCell>
-                              <TableCell className='hidden md:table-cell'>
-                                <Badge
-                                  variant={
-                                    article.isFeatured ? 'default' : 'outline'
-                                  }
-                                >
-                                  {article.isFeatured ? 'En vedette' : 'Normal'}
-                                </Badge>
-                              </TableCell>
+
                               <TableCell className='hidden md:table-cell'>
                                 <div className='text-sm'>
                                   <div>
@@ -523,7 +503,14 @@ const Blog = () => {
                               </TableCell>
                               <TableCell>
                                 <div className='flex items-center gap-1'>
-                                  <ArticlePreviewModal article={article} />
+                                  <Button
+                                    variant='ghost'
+                                    size='sm'
+                                    onClick={() => handlePreviewArticle(article)}
+                                    title='Prévisualiser'
+                                  >
+                                    <Eye className='h-4 w-4' />
+                                  </Button>
                                   <Button
                                     variant='ghost'
                                     size='sm'
@@ -558,40 +545,7 @@ const Blog = () => {
                                       <EyeOff className='h-4 w-4' />
                                     )}
                                   </Button>
-                                  <Button
-                                    variant='ghost'
-                                    size='sm'
-                                    onClick={() =>
-                                      handleToggleFeatured(article.id)
-                                    }
-                                    title={
-                                      article.isFeatured
-                                        ? 'Retirer de la vedette'
-                                        : 'Mettre en vedette'
-                                    }
-                                    className={
-                                      article.isFeatured
-                                        ? 'text-yellow-600 hover:text-yellow-700'
-                                        : 'text-gray-400 hover:text-yellow-600'
-                                    }
-                                    disabled={
-                                      loadingActions[`featured-${article.id}`]
-                                    }
-                                  >
-                                    {loadingActions[
-                                      `featured-${article.id}`
-                                    ] ? (
-                                      <Loader2 className='h-4 w-4 animate-spin' />
-                                    ) : (
-                                      <Star
-                                        className={`h-4 w-4 ${
-                                          article.isFeatured
-                                            ? 'fill-current'
-                                            : ''
-                                        }`}
-                                      />
-                                    )}
-                                  </Button>
+
                                   <Button
                                     variant='ghost'
                                     size='sm'
@@ -742,6 +696,21 @@ const Blog = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Article Preview Modal */}
+      {articleToPreview && (
+        <ArticlePreviewModal
+          article={articleToPreview}
+          isOpen={isPreviewModalOpen}
+          onClose={() => {
+            setIsPreviewModalOpen(false)
+            setArticleToPreview(null)
+          }}
+          onEdit={handleEditFromPreview}
+          onTogglePublic={handleTogglePublicFromPreview}
+          isPublic={articleToPreview.isPublic}
+        />
+      )}
     </div>
   )
 }

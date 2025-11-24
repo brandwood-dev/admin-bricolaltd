@@ -28,9 +28,12 @@ class ApiClient {
   }
 
   private setupInterceptors(): void {
-    // Request interceptor to add auth token
+    // Request interceptor to add auth token and log requests
     this.client.interceptors.request.use(
       (config) => {
+        console.log(`🌐 API Request: ${config.method?.toUpperCase()} ${config.url}`);
+        console.log(`🌐 API Request Data:`, config.data);
+        
         const token = localStorage.getItem('admin_token');
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
@@ -38,16 +41,21 @@ class ApiClient {
         return config;
       },
       (error) => {
+        console.error('🌐 API Request Error:', error);
         return Promise.reject(error);
       }
     );
 
-    // Response interceptor for handling token refresh
+    // Response interceptor for handling token refresh and logging responses
     this.client.interceptors.response.use(
       (response: AxiosResponse<ApiResponse>) => {
+        console.log(`🌐 API Response: ${response.status} ${response.config.url}`);
+        console.log(`🌐 API Response Data:`, response.data);
         return response;
       },
       async (error) => {
+        console.error(`🌐 API Response Error:`, error.response?.status, error.config?.url);
+        console.error(`🌐 API Response Error Data:`, error.response?.data);
         const originalRequest = error.config;
         
         if (error.response?.status === 401 && !originalRequest._retry) {

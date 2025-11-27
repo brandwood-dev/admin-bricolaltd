@@ -294,23 +294,15 @@ const BookingDetailsModal = ({
                   €
                 </span>
               </div>
-              <div className='flex justify-between'>
-                <span className='text-gray-600'>Caution:</span>
-                <span className='font-semibold'>
-                  {booking.tool.depositAmount || 0}€
-                </span>
-              </div>
               <div className='border-t pt-2'>
                 <div className='flex justify-between'>
                   <span className='font-semibold'>Total facturé:</span>
                   <span className='font-bold text-lg'>
                     {Math.ceil(
-                      ((new Date(booking.endDate).getTime() -
+                      (new Date(booking.endDate).getTime() -
                         new Date(booking.startDate).getTime()) /
-                        (1000 * 60 * 60 * 24)) *
-                        (Number(booking.tool.basePrice) +
-                          Number(booking.tool.depositAmount))
-                    )}
+                        (1000 * 60 * 60 * 24)
+                    ) * (Number(booking.tool.basePrice) || 0)}
                     €
                   </span>
                 </div>
@@ -356,12 +348,7 @@ const BookingDetailsModal = ({
                   {booking.renter?.phoneNumber || 'Non spécifié'}
                 </p>
               </div>
-              <div className='flex gap-2 pt-2'>
-                <Button variant='outline' size='sm' className='flex-1'>
-                  <MessageSquare className='h-4 w-4 mr-1' />
-                  Contacter
-                </Button>
-              </div>
+              
             </CardContent>
           </Card>
 
@@ -405,12 +392,7 @@ const BookingDetailsModal = ({
                     'Non spécifié'}
                 </p>
               </div>
-              <div className='flex gap-2 pt-2'>
-                <Button variant='outline' size='sm' className='flex-1'>
-                  <MessageSquare className='h-4 w-4 mr-1' />
-                  Contacter
-                </Button>
-              </div>
+              
             </CardContent>
           </Card>
 
@@ -905,7 +887,7 @@ const Bookings = () => {
   const generateBookingSteps = (booking: any) => {
     const steps = []
 
-    // Étape 1: En attente
+    // En attente
     steps.push({
       id: 'pending',
       label: 'En attente',
@@ -914,73 +896,58 @@ const Bookings = () => {
       description: 'Demande de réservation créée',
     })
 
-    // Étape 2: Acceptée ou Refusée
-    if (booking.status === BookingStatus.CANCELLED) {
-      steps.push({
-        id: 'cancelled',
-        label: 'Refusée',
-        status: 'cancelled' as const,
-        date: '2024-03-16',
-        description: booking.cancellationReason || 'Réservation annulée',
-      })
-    } else {
+    // Acceptée
+    if (
+      booking.status === BookingStatus.ACCEPTED ||
+      booking.status === BookingStatus.ONGOING ||
+      booking.status === BookingStatus.COMPLETED
+    ) {
       steps.push({
         id: 'accepted',
         label: 'Acceptée',
-        status: 'completed' as const,
-        date: '2024-03-16',
+        status:
+          booking.status === BookingStatus.ACCEPTED
+            ? ('current' as const)
+            : ('completed' as const),
+        date: booking.acceptedAt || booking.updatedAt || booking.createdAt,
         description: 'Demande acceptée par le propriétaire',
       })
+    }
 
-      // Étape 3: Confirmée ou Annulée (si acceptée)
-      if (
-        booking.status === BookingStatus.ACCEPTED ||
-        booking.status === BookingStatus.ONGOING ||
-        booking.status === BookingStatus.COMPLETED
-      ) {
-        steps.push({
-          id: 'confirmed',
-          label: 'Confirmée',
-          status: 'completed' as const,
-          date: '2024-03-17',
-          description: 'Paiement effectué et réservation confirmée',
-        })
+    // En cours
+    if (booking.status === BookingStatus.ONGOING || booking.status === BookingStatus.COMPLETED) {
+      steps.push({
+        id: 'ongoing',
+        label: 'En cours',
+        status:
+          booking.status === BookingStatus.ONGOING
+            ? ('current' as const)
+            : ('completed' as const),
+        date: booking.startDate || booking.dates?.start,
+        description: 'Location en cours',
+      })
+    }
 
-        // Étape 4: En cours (si confirmée)
-        if (
-          booking.status === BookingStatus.ONGOING ||
-          booking.status === BookingStatus.COMPLETED
-        ) {
-          steps.push({
-            id: 'active',
-            label: 'En cours',
-            status:
-              booking.status === BookingStatus.ONGOING
-                ? ('current' as const)
-                : ('completed' as const),
-            date: booking.dates?.start,
-            description: 'Location en cours',
-          })
-        }
+    // Terminée
+    if (booking.status === BookingStatus.COMPLETED) {
+      steps.push({
+        id: 'completed',
+        label: 'Terminée',
+        status: 'completed' as const,
+        date: booking.endDate || booking.dates?.end,
+        description: 'Location terminée avec succès',
+      })
+    }
 
-        // Étape 5: Terminée (si completed)
-        if (booking.status === BookingStatus.COMPLETED) {
-          steps.push({
-            id: 'completed',
-            label: 'Terminée',
-            status: 'completed' as const,
-            date: booking.dates?.end,
-            description: 'Location terminée avec succès',
-          })
-        }
-      } else if (booking.status === BookingStatus.PENDING) {
-        steps.push({
-          id: 'pending_confirmation',
-          label: 'Confirmée',
-          status: 'pending' as const,
-          description: 'En attente de confirmation',
-        })
-      }
+    // Annulée
+    if (booking.status === BookingStatus.CANCELLED) {
+      steps.push({
+        id: 'cancelled',
+        label: 'Annulée',
+        status: 'cancelled' as const,
+        date: booking.cancelledAt || booking.updatedAt,
+        description: booking.cancellationReason || 'Réservation annulée',
+      })
     }
 
     return steps
@@ -1031,13 +998,7 @@ const Bookings = () => {
             onDateChange={setDateRange}
             placeholder='Filtrer par période de réservation'
           />
-          <Button
-            variant='outline'
-            onClick={() => setShowFilters(!showFilters)}
-          >
-            <Filter className='h-4 w-4 mr-2' />
-            Filtres avancés
-          </Button>
+          
         </div>
       </div>
 
@@ -1505,17 +1466,15 @@ const Bookings = () => {
                           <TableCell>
                             <div className='text-sm'>
                               <div className='font-medium'>
-                                {/* total = tool.price * nombre de jour */}
-                                {booking.tool?.basePrice *
-                                  Math.ceil(
-                                    (new Date(booking.endDate).getTime() -
-                                      new Date(booking.startDate).getTime()) /
-                                      (1000 * 60 * 60 * 24)
-                                  ) || 0}
+                                {Math.round(
+                                  ((booking.tool?.basePrice || 0) *
+                                    Math.ceil(
+                                      (new Date(booking.endDate).getTime() -
+                                        new Date(booking.startDate).getTime()) /
+                                        (1000 * 60 * 60 * 24)
+                                    )) * 1.06
+                                )}
                                 €
-                              </div>
-                              <div className='text-gray-500 text-xs'>
-                                + {booking.tool?.depositAmount || 0}€ caution
                               </div>
                             </div>
                           </TableCell>

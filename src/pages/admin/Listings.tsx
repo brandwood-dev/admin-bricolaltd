@@ -115,6 +115,50 @@ const getConditionText = (condition: string | number) => {
   )
 }
 
+const CATEGORY_TRANSLATIONS: Record<string, string> = {
+  gardening: 'Jardinage',
+  cleaning: 'Nettoyage',
+  diy: 'Bricolage',
+  event: 'Événementiel',
+  events: 'Événementiel',
+}
+
+const SUBCATEGORY_TRANSLATIONS: Record<string, string> = {
+  'lawn': 'Gazon',
+  'soil': 'Terre',
+  'wood': 'Bois',
+  'tree': 'Arbre',
+  'leaves': 'Feuilles',
+  'fabric': 'Tissu',
+  'water': 'Eau',
+  'dust': 'Poussière',
+  'construction': 'Construction',
+  'electricity': 'Électricité',
+  'painting': 'Peinture',
+  'screws-and-bolts': 'Vis et Boulons',
+  'heavy-load': 'Charge Lourde',
+  'engine': 'Moteur',
+  'wheel': 'Roue',
+  'lighting': 'Éclairage',
+  'kitchen': 'Cuisine',
+  'entertainment-and-games': 'Animation et Jeux',
+  'furniture': 'Mobilier',
+  'decoration': 'Décoration',
+  'structure': 'Structure',
+}
+
+const translateCategoryName = (name?: string) => {
+  if (!name) return 'Non catégorisé'
+  const key = name.toLowerCase()
+  return CATEGORY_TRANSLATIONS[key] || name
+}
+
+const translateSubcategoryName = (name?: string) => {
+  if (!name) return 'Sans sous-catégorie'
+  const key = name.toLowerCase()
+  return SUBCATEGORY_TRANSLATIONS[key] || name
+}
+
 // Composants Dialog définis en dehors du composant principal
 const ApproveDialog = ({ listingId, onApprove }: any) => (
   <AlertDialog>
@@ -653,7 +697,7 @@ const ListingDetailsModal = ({
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value='inappropriate_content'>
-                  Contenu inapproprié
+                  Inappropriate Content
                 </SelectItem>
                 <SelectItem value='poor_quality_photos'>
                   Poor Quality Photos
@@ -670,7 +714,6 @@ const ListingDetailsModal = ({
                 <SelectItem value='false_or_misleading_information'>
                   False or Misleading Information
                 </SelectItem>
-               
               </SelectContent>
             </Select>
           </div>
@@ -949,7 +992,6 @@ const Listings = () => {
         // Extract data from response.data.data if it exists, otherwise use response.data directly
         const subcategoriesData = response.data.data || response.data
         setSubcategories(subcategoriesData)
-        setFilteredSubcategories(subcategoriesData)
       } else {
         // Only throw error if response indicates failure, not just missing data structure
         if (response.success === false) {
@@ -960,52 +1002,7 @@ const Listings = () => {
       }
     } catch (error) {
       console.error('Error loading subcategories:', error)
-      // Use mock data when API is not available
-      const mockSubcategories = [
-        {
-          id: '1',
-          name: 'perceuses',
-          displayName: 'Perceuses',
-          categoryId: '1',
-        },
-        { id: '2', name: 'scies', displayName: 'Scies', categoryId: '1' },
-        {
-          id: '3',
-          name: 'ponceuses',
-          displayName: 'Ponceuses',
-          categoryId: '1',
-        },
-        {
-          id: '4',
-          name: 'betonnieres',
-          displayName: 'Bétonnières',
-          categoryId: '2',
-        },
-        {
-          id: '5',
-          name: 'echafaudages',
-          displayName: 'Échafaudages',
-          categoryId: '2',
-        },
-      ]
-      setSubcategories(mockSubcategories)
-      setFilteredSubcategories(mockSubcategories)
-
-      // Only show error toast if it's not a network error (API unavailable)
-      if (
-        !error.message?.includes('Network Error') &&
-        !error.message?.includes('ERR_NETWORK')
-      ) {
-        const errorMessage =
-          error instanceof Error
-            ? error.message
-            : 'Erreur lors du chargement des sous-catégories'
-        toast({
-          title: 'Erreur',
-          description: errorMessage,
-          variant: 'destructive',
-        })
-      }
+      
     }
   }
 
@@ -1027,54 +1024,7 @@ const Listings = () => {
       }
     } catch (error) {
       console.error('Error loading subcategories for category:', error)
-      // Filter mock data by category when API is not available
-      const mockSubcategories = [
-        {
-          id: '1',
-          name: 'perceuses',
-          displayName: 'Perceuses',
-          categoryId: '1',
-        },
-        { id: '2', name: 'scies', displayName: 'Scies', categoryId: '1' },
-        {
-          id: '3',
-          name: 'ponceuses',
-          displayName: 'Ponceuses',
-          categoryId: '1',
-        },
-        {
-          id: '4',
-          name: 'betonnieres',
-          displayName: 'Bétonnières',
-          categoryId: '2',
-        },
-        {
-          id: '5',
-          name: 'echafaudages',
-          displayName: 'Échafaudages',
-          categoryId: '2',
-        },
-      ]
-      const filtered = mockSubcategories.filter(
-        (sub) => sub.categoryId === categoryId
-      )
-      setFilteredSubcategories(filtered)
-
-      // Only show error toast if it's not a network error (API unavailable)
-      if (
-        !error.message?.includes('Network Error') &&
-        !error.message?.includes('ERR_NETWORK')
-      ) {
-        const errorMessage =
-          error instanceof Error
-            ? error.message
-            : 'Erreur lors du chargement des sous-catégories'
-        toast({
-          title: 'Erreur',
-          description: errorMessage,
-          variant: 'destructive',
-        })
-      }
+      
     }
   }
 
@@ -1083,20 +1033,30 @@ const Listings = () => {
     try {
       setLoading(true)
       setError(null)
+      const moderationStatusParam =
+        moderationStatusFilter !== 'all'
+          ? String(moderationStatusFilter).toUpperCase()
+          : undefined
+
+      const formatLocalDate = (d: Date) => {
+        const y = d.getFullYear()
+        const m = String(d.getMonth() + 1).padStart(2, '0')
+        const day = String(d.getDate()).padStart(2, '0')
+        return `${y}-${m}-${day}`
+      }
+
       const filters = {
         search: searchTerm || undefined,
         status: statusFilter !== 'all' ? statusFilter : undefined,
-        moderationStatus:
-          moderationStatusFilter !== 'all' ? moderationStatusFilter : undefined,
+        moderationStatus: moderationStatusParam,
+        moderation: moderationStatusParam,
+        modStatus: moderationStatusParam,
+        category: categoryFilter !== 'all' ? categoryFilter : undefined,
         categoryId: categoryFilter !== 'all' ? categoryFilter : undefined,
-        subcategoryId:
-          subcategoryFilter !== 'all' ? subcategoryFilter : undefined,
-        dateFrom: dateRange?.from
-          ? dateRange.from.toISOString().split('T')[0]
-          : undefined,
-        dateTo: dateRange?.to
-          ? dateRange.to.toISOString().split('T')[0]
-          : undefined,
+        subcategory: subcategoryFilter !== 'all' ? subcategoryFilter : undefined,
+        subcategoryId: subcategoryFilter !== 'all' ? subcategoryFilter : undefined,
+        dateFrom: dateRange?.from ? formatLocalDate(dateRange.from) : undefined,
+        dateTo: dateRange?.to ? formatLocalDate(dateRange.to) : undefined,
         page: currentPage,
         limit: itemsPerPage,
       }
@@ -1134,12 +1094,7 @@ const Listings = () => {
         const toolsArray = Array.isArray(toolsData) ? toolsData : []
         setAllTools(toolsArray)
         // Fallback client: si l'API ne filtre pas sur la modération, filtrer côté client
-        const finalTools =
-          moderationStatusFilter !== 'all'
-            ? toolsArray.filter(
-                (t: any) => t.moderationStatus === moderationStatusFilter
-              )
-            : toolsArray
+        const finalTools = toolsArray
         setTools(finalTools)
 
         // Utiliser la pagination côté serveur
@@ -1186,121 +1141,7 @@ const Listings = () => {
           ? error.message
           : 'Erreur lors du chargement des outils'
       )
-      // Use mock data when API is not available
-      const mockTools = [
-        {
-          id: '1',
-          title: 'Perceuse Bosch Professional',
-          description: 'Perceuse électrique professionnelle avec batterie',
-          brand: 'Bosch',
-          model: 'GSR 18V-60 C',
-          year: 2023,
-          condition: 'Excellent',
-          pickupAddress: 'Paris 15ème',
-          basePrice: 25,
-          depositAmount: 150,
-          toolStatus: 'PUBLISHED',
-          availabilityStatus: 'AVAILABLE',
-          moderationStatus: 'CONFIRMED',
-          category: { id: '1', name: 'Outillage électrique' },
-          subcategory: { id: '1', name: 'Perceuses' },
-          owner: {
-            id: '1',
-            firstName: 'Jean',
-            lastName: 'Dupont',
-            email: 'jean.dupont@email.com',
-          },
-          photos: [
-            {
-              id: '1',
-              url: 'https://images.unsplash.com/photo-1572981779307-38b8cabb2407?w=400',
-              isPrimary: true,
-              createdAt: new Date().toISOString(),
-            },
-            {
-              id: '2',
-              url: 'https://images.unsplash.com/photo-1504148455328-c376907d081c?w=400',
-              isPrimary: false,
-              createdAt: new Date().toISOString(),
-            },
-          ],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-        {
-          id: '2',
-          title: 'Scie circulaire Makita',
-          description: 'Scie circulaire portative pour découpe précise',
-          brand: 'Makita',
-          model: 'HS7601',
-          year: 2022,
-          condition: 'Bon',
-          pickupAddress: 'Lyon 3ème',
-          basePrice: 30,
-          depositAmount: 200,
-          toolStatus: 'UNDER_REVIEW',
-          availabilityStatus: 'AVAILABLE',
-          moderationStatus: 'PENDING',
-          category: { id: '1', name: 'Outillage électrique' },
-          subcategory: { id: '2', name: 'Scies' },
-          owner: {
-            id: '2',
-            firstName: 'Marie',
-            lastName: 'Martin',
-            email: 'marie.martin@email.com',
-          },
-          photos: [
-            {
-              id: '3',
-              url: 'https://images.unsplash.com/photo-1581092918056-0c4c3acd3789?w=400',
-              isPrimary: true,
-              createdAt: new Date().toISOString(),
-            },
-          ],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        },
-      ]
-      // Créer des données mock plus réalistes pour tester la pagination
-      const extendedMockTools = []
-      for (let i = 0; i < 73; i++) {
-        extendedMockTools.push({
-          ...mockTools[i % 2],
-          id: `mock-${i + 1}`,
-          title: `${mockTools[i % 2].title} ${i + 1}`,
-          owner: {
-            ...mockTools[i % 2].owner,
-            id: `owner-${i + 1}`,
-            firstName: `User${i + 1}`,
-            lastName: `Test${i + 1}`,
-          },
-        })
-      }
-
-      setAllTools(extendedMockTools)
-
-      // Appliquer la pagination côté client pour les données mock
-      const startIndex = (currentPage - 1) * itemsPerPage
-      const endIndex = startIndex + itemsPerPage
-      const paginatedMockTools = extendedMockTools.slice(startIndex, endIndex)
-      setTools(paginatedMockTools)
-
-      const simulatedTotal = extendedMockTools.length
-      const simulatedPages = Math.ceil(simulatedTotal / itemsPerPage)
-
-      setTotalTools(simulatedTotal)
-      setTotalPages(simulatedPages)
-
-      // Debug: Logs pour la pagination en mode erreur
-      console.log('Pagination Debug - Error/Mock:', {
-        mockToolsLength: mockTools.length,
-        simulatedTotal,
-        simulatedPages,
-        itemsPerPage,
-        currentPage,
-        paginationCondition:
-          simulatedPages > 1 || simulatedTotal > itemsPerPage,
-      })
+      
 
       // Only show error toast if it's not a network error (API unavailable)
       if (
@@ -1392,16 +1233,30 @@ const Listings = () => {
     loadAllSubcategories()
   }, [])
 
+  // Reset pagination when filters change
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [
+    searchTerm,
+    statusFilter,
+    moderationStatusFilter,
+    categoryFilter,
+    subcategoryFilter,
+    dateRange,
+  ])
+
   // Load subcategories when category changes
   useEffect(() => {
     if (categoryFilter === 'all') {
-      // Show all subcategories when no category is selected
-      setFilteredSubcategories(subcategories)
+      setFilteredSubcategories([])
+    } else if (subcategories && subcategories.length > 0) {
+      const filtered = subcategories.filter(
+        (sub: any) => String(sub.categoryId) === String(categoryFilter)
+      )
+      setFilteredSubcategories(filtered)
     } else {
-      // Load subcategories for the selected category from API
       loadSubcategoriesByCategory(categoryFilter)
     }
-    // Reset subcategory filter when category changes
     if (subcategoryFilter !== 'all') {
       setSubcategoryFilter('all')
     }
@@ -1699,9 +1554,9 @@ const Listings = () => {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value='all'>Toutes les catégories</SelectItem>
-                {categories?.map((category) => (
+                {categories?.map((category: any) => (
                   <SelectItem key={category.id} value={category.id}>
-                    {category.displayName || category.name}
+                    {translateCategoryName(category.name)}
                   </SelectItem>
                 )) || []}
               </SelectContent>
@@ -1709,16 +1564,21 @@ const Listings = () => {
             <Select
               value={subcategoryFilter}
               onValueChange={setSubcategoryFilter}
+              disabled={categoryFilter === 'all'}
             >
-              <SelectTrigger>
+              <SelectTrigger disabled={categoryFilter === 'all'}>
                 <Filter className='h-4 w-4 mr-2' />
-                <SelectValue placeholder='Sous-catégorie' />
+                <SelectValue placeholder={
+                  categoryFilter === 'all'
+                    ? 'Sélectionnez une catégorie'
+                    : 'Sous-catégorie'
+                } />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value='all'>Toutes les sous-catégories</SelectItem>
-                {filteredSubcategories?.map((subcategory) => (
+                {filteredSubcategories?.map((subcategory: any) => (
                   <SelectItem key={subcategory.id} value={subcategory.id}>
-                    {subcategory.displayName || subcategory.name}
+                    {translateSubcategoryName(subcategory.name)}
                   </SelectItem>
                 )) || []}
               </SelectContent>
@@ -1822,13 +1682,13 @@ const Listings = () => {
                           <div className='flex flex-col gap-1'>
                             <Badge variant='outline'>
                               {listing.category?.displayName ||
-                                listing.category?.name ||
+                                translateCategoryName(listing.category?.name) ||
                                 'N/A'}
                             </Badge>
                             {listing.subcategory && (
                               <Badge variant='secondary' className='text-xs'>
                                 {listing.subcategory?.displayName ||
-                                  listing.subcategory?.name}
+                                  translateSubcategoryName(listing.subcategory?.name)}
                               </Badge>
                             )}
                           </div>

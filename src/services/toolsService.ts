@@ -166,7 +166,8 @@ export class ToolsService {
 
   // Update moderation status
   async updateModerationStatus(id: string, status: 'Pending' | 'Confirmed' | 'Rejected'): Promise<ApiResponse<Tool>> {
-    return await apiClient.patch<Tool>(`/tools/${id}/moderation-status`, { status });
+    const normalized = String(status).toUpperCase() as 'PENDING' | 'CONFIRMED' | 'REJECTED'
+    return await apiClient.patch<Tool>(`/tools/${id}/moderation-status`, { status: normalized });
   }
 
 

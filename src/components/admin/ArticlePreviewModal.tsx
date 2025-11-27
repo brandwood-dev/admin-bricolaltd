@@ -71,20 +71,32 @@ const ArticlePreviewModal = ({
     }
   }, [article])
 
-  // Get all images from article and sections
+  const sectionsAsc = (article.sections || [])
+    .slice()
+    .sort((a: any, b: any) => {
+      const aDate = a.createdAt ? new Date(a.createdAt).getTime() : a.orderIndex ?? 0
+      const bDate = b.createdAt ? new Date(b.createdAt).getTime() : b.orderIndex ?? 0
+      return aDate - bDate
+    })
+
   const allImages = [
     ...(article.imageUrl ? [{ url: article.imageUrl, alt: article.title, type: 'cover' }] : []),
-    // Add section images if available
-    ...(article.sections?.flatMap((section, sectionIndex) => {
-      console.log(`Processing section ${sectionIndex} for images:`, section.title, 'images:', section.images)
-      return section.images?.map((image, imageIndex) => ({
+    ...(sectionsAsc.flatMap((section, sectionIndex) => {
+      const imagesAsc = (section.images || [])
+        .slice()
+        .sort((a: any, b: any) => {
+          const aDate = a.createdAt ? new Date(a.createdAt).getTime() : a.orderIndex ?? 0
+          const bDate = b.createdAt ? new Date(b.createdAt).getTime() : b.orderIndex ?? 0
+          return aDate - bDate
+        })
+      return imagesAsc.map((image, imageIndex) => ({
         url: image.url,
         alt: image.alt || `${section.title} - Image ${imageIndex + 1}`,
         type: 'section',
         sectionTitle: section.title,
         sectionIndex
-      })) || []
-    }) || [])
+      }))
+    }))
   ]
 
   console.log('All images collected:', allImages.length, allImages)
@@ -156,15 +168,7 @@ const ArticlePreviewModal = ({
               </div>
               <div className="flex items-center gap-3 flex-shrink-0">
                 {getStatusBadge()}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setIsFullscreen(!isFullscreen)}
-                  title={isFullscreen ? "Quitter le mode plein écran" : "Mode plein écran"}
-                  className="hover:bg-gray-100 transition-colors"
-                >
-                  {isFullscreen ? <X className="h-4 w-4" /> : <ExternalLink className="h-4 w-4" />}
-                </Button>
+                
                 <Button
                   variant="ghost"
                   size="sm"
@@ -319,8 +323,8 @@ const ArticlePreviewModal = ({
           )}
 
           {/* Sections */}
-          {article.sections && Array.isArray(article.sections) && article.sections.length > 0 ? (
-            <div className="space-y-12">
+                {sectionsAsc && Array.isArray(sectionsAsc) && sectionsAsc.length > 0 ? (
+                  <div className="space-y-12">
               <Separator className="my-12 bg-gradient-to-r from-transparent via-gray-300 to-transparent h-px" />
               <div className="text-center">
                 <h2 className="text-3xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent inline-flex items-center gap-4">
@@ -329,16 +333,28 @@ const ArticlePreviewModal = ({
                   <div className="w-12 h-1 bg-gradient-to-r from-purple-500 to-blue-500 rounded-full" />
                 </h2>
               </div>
-              <div className="space-y-8">
-                {article.sections.map((section, index) => {
+                  <div className="space-y-8">
+                {sectionsAsc.map((section, index) => {
                   console.log(`Rendering section ${index}:`, section)
                   console.log(`Section ${index} title:`, section.title)
                   console.log(`Section ${index} paragraphs:`, section.paragraphs)
                   console.log(`Section ${index} images:`, section.images)
                   
                   // Ensure paragraphs and images arrays exist and are arrays
-                  const paragraphs = Array.isArray(section.paragraphs) ? section.paragraphs : []
-                  const images = Array.isArray(section.images) ? section.images : []
+                  const paragraphs = (Array.isArray(section.paragraphs) ? section.paragraphs : [])
+                    .slice()
+                    .sort((a: any, b: any) => {
+                      const aDate = a.createdAt ? new Date(a.createdAt).getTime() : a.orderIndex ?? 0
+                      const bDate = b.createdAt ? new Date(b.createdAt).getTime() : b.orderIndex ?? 0
+                      return aDate - bDate
+                    })
+                  const images = (Array.isArray(section.images) ? section.images : [])
+                    .slice()
+                    .sort((a: any, b: any) => {
+                      const aDate = a.createdAt ? new Date(a.createdAt).getTime() : a.orderIndex ?? 0
+                      const bDate = b.createdAt ? new Date(b.createdAt).getTime() : b.orderIndex ?? 0
+                      return aDate - bDate
+                    })
                   
                   return (
                     <Card key={section.id || index} className="border-l-4 border-l-blue-500 shadow-xl rounded-2xl overflow-hidden hover:shadow-2xl transition-all duration-300 group hover:border-l-purple-500">

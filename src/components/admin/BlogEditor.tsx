@@ -65,7 +65,6 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
   const [imageUrl, setImageUrl] = useState('')
   const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [category, setCategory] = useState('')
-  const [isPublic, setIsPublic] = useState(true)
 
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<{ [key: string]: string }>({})
@@ -104,7 +103,6 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
           setSummary(draft.summary || '')
           setSections(draft.sections || [])
           setCategory(draft.category || '')
-          setIsPublic(draft.isPublic ?? true)
         }
       } catch {}
     }
@@ -117,12 +115,11 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
       summary,
       sections,
       category,
-      isPublic,
     }
     try {
       localStorage.setItem(DRAFT_KEY, JSON.stringify(payload))
     } catch {}
-  }, [title, summary, sections, category, isPublic, isOpen])
+  }, [title, summary, sections, category, isOpen])
 
   // Confirmation avant fermeture si modifications non enregistrées
   const requestClose = () => {
@@ -146,7 +143,31 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
       // Convertir le contenu HTML en sections si nécessaire
       if (article.sections && article.sections.length > 0) {
         console.log('BlogEditor - Setting sections from article:', article.sections)
-        setSections(article.sections)
+        const sortedSections = article.sections
+          .slice()
+          .sort((a: any, b: any) => {
+            const aDate = a.createdAt ? new Date(a.createdAt).getTime() : a.orderIndex ?? 0
+            const bDate = b.createdAt ? new Date(b.createdAt).getTime() : b.orderIndex ?? 0
+            return aDate - bDate
+          })
+          .map((section: any) => ({
+            ...section,
+            paragraphs: (Array.isArray(section.paragraphs) ? section.paragraphs : [])
+              .slice()
+              .sort((a: any, b: any) => {
+                const aDate = a.createdAt ? new Date(a.createdAt).getTime() : a.orderIndex ?? 0
+                const bDate = b.createdAt ? new Date(b.createdAt).getTime() : b.orderIndex ?? 0
+                return aDate - bDate
+              }),
+            images: (Array.isArray(section.images) ? section.images : [])
+              .slice()
+              .sort((a: any, b: any) => {
+                const aDate = a.createdAt ? new Date(a.createdAt).getTime() : a.orderIndex ?? 0
+                const bDate = b.createdAt ? new Date(b.createdAt).getTime() : b.orderIndex ?? 0
+                return aDate - bDate
+              }),
+          }))
+        setSections(sortedSections)
       } else if (article.content) {
         // Convertir le contenu HTML existant en une section par défaut
         const defaultSection: Section = {
@@ -165,7 +186,6 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
       setImageUrl(article.imageUrl || '')
       // Utiliser le nom si présent
       setCategory(article.category || '')
-      setIsPublic(article.isPublic ?? true)
     } else {
       console.log('BlogEditor - No article provided, resetting form')
       setTitle('')
@@ -174,7 +194,6 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
       setImageUrl('')
       setSelectedFiles([])
       setCategory('')
-      setIsPublic(true)
     }
     setErrors({})
   }, [article, isOpen])
@@ -245,7 +264,7 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
     }
 
     const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
-    const maxSize = 5 * 1024 * 1024
+    const maxSize = 10 * 1024 * 1024
     if (selectedFiles && selectedFiles.length > 0) {
       const file = selectedFiles[0]
       if (!allowedTypes.includes(file.type)) {
@@ -253,7 +272,7 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
           'Le fichier doit être une image (jpg, png, webp)'
       } else if (file.size > maxSize) {
         fieldErrors.coverImage =
-          "L'image doit être inférieure à 5 Mo"
+          "L'image doit être inférieure à 10 Mo"
       }
     }
 
@@ -437,14 +456,13 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
     }]);
   };
 
-  const handleSequentialSave = async (isDraft: boolean = false) => {
+  const handleSequentialSave = async () => {
     try {
       // Prepare the data for intelligent saver
       const saverData = {
         title,
         summary: summary.trim() || undefined,
         category: category || undefined,
-        isPublic: isDraft ? false : isPublic,
         coverImageFile: selectedFiles?.[0],
         sections: sections.map(section => ({
           ...section,
@@ -491,7 +509,6 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
         title: data.title,
         summary: data.summary,
         category: data.category,
-        isPublic: data.isPublic,
         coverImageFile: data.coverImageFile,
         sections: data.sections,
         onProgress: (step: string) => {
@@ -556,7 +573,7 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
       }
 
       // Use the intelligent save system
-      await handleSequentialSave(isDraft);
+      await handleSequentialSave();
       
     } catch (error: any) {
       setProgressStep('')
@@ -598,11 +615,6 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
   return (
     <Dialog
       open={isOpen}
-      onOpenChange={(open) => {
-        if (!open) {
-          requestClose()
-        }
-      }}
     >
       <DialogContent className='max-w-[95vw] sm:max-w-[90vw] lg:max-w-6xl max-h-[95vh] overflow-hidden flex flex-col p-0'>
         <div className='p-4 sm:p-6 border-b'>
@@ -731,7 +743,7 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
                               'image/png',
                               'image/webp',
                             ]
-                            const maxSize = 5 * 1024 * 1024
+                            const maxSize = 10 * 1024 * 1024
                             const newErrors: any = { ...errors }
                             if (!allowedTypes.includes(file.type)) {
                               newErrors.coverImage =
@@ -784,14 +796,7 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
                     )}
                   </div>
 
-                  <div className='flex items-center space-x-2'>
-                    <Switch
-                      id='isPublic'
-                      checked={isPublic}
-                      onCheckedChange={setIsPublic}
-                    />
-                    <Label htmlFor='isPublic'>Article public</Label>
-                  </div>
+                 
                 </CardContent>
               </Card>
 
@@ -837,28 +842,7 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
             </Button>
 
             <div className='flex flex-col sm:flex-row gap-2 sm:gap-3 order-1 sm:order-2 sm:ml-auto'>
-              <Button
-                variant='outline'
-                onClick={() => handleSequentialSave(true)}
-                disabled={loading || !canSubmit}
-                className='border-orange-200 text-orange-700 hover:bg-orange-50 w-full sm:w-auto order-2 sm:order-1'
-              >
-                {loading ? (
-                  <>
-                    <Loader2 className='h-4 w-4 mr-2 animate-spin' />
-                    <span className='hidden sm:inline'>Enregistrement...</span>
-                    <span className='sm:hidden'>Enreg...</span>
-                  </>
-                ) : (
-                  <>
-                    <Edit3 className='h-4 w-4 mr-2' />
-                    <span className='hidden sm:inline'>
-                      Enregistrer comme brouillon
-                    </span>
-                    <span className='sm:hidden'>Brouillon</span>
-                  </>
-                )}
-              </Button>
+             
 
               <Button
                 onClick={() => handleSequentialSave(false)}
@@ -869,20 +853,20 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
                   <>
                     <Loader2 className='h-4 w-4 mr-2 animate-spin' />
                     <span className='hidden sm:inline'>
-                      {article ? 'Mise à jour...' : 'Publication...'}
+                      {article ? 'Mise à jour...' : 'Enregistrement...'}
                     </span>
                     <span className='sm:hidden'>
-                      {article ? 'MAJ...' : 'Pub...'}
+                      {article ? 'MAJ...' : 'Enreg...'}
                     </span>
                   </>
                 ) : (
                   <>
                     <Save className='h-4 w-4 mr-2' />
                     <span className='hidden sm:inline'>
-                      {article ? 'Mettre à jour' : 'Publier'}
+                      {article ? 'Mettre à jour' : 'Enregistrer'}
                     </span>
                     <span className='sm:hidden'>
-                      {article ? 'Modifier' : 'Publier'}
+                      {article ? 'Modifier' : 'Enreg'}
                     </span>
                   </>
                 )}

@@ -23,7 +23,6 @@ interface IntelligentSaveOptions {
   title: string
   summary: string
   category: string
-  isPublic: boolean
   sections: Section[]
   coverImageFile?: File | null
   onProgress?: (step: string) => void
@@ -62,7 +61,6 @@ export class IntelligentArticleService {
       title,
       summary,
       category,
-      isPublic,
       sections,
       coverImageFile,
       onProgress,
@@ -90,7 +88,6 @@ export class IntelligentArticleService {
         title: title.trim(),
         summary: summary?.trim(),
         category,
-        isPublic,
         imageUrl: coverImageUrl,
       }
 

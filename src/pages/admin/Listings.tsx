@@ -145,6 +145,14 @@ const SUBCATEGORY_TRANSLATIONS: Record<string, string> = {
   'furniture': 'Mobilier',
   'decoration': 'Décoration',
   'structure': 'Structure',
+  'pruning-and-cutting' : 'Taille et coupe',
+  'soil-maintenance' : 'Entretien du sol',
+  'plant-care' : 'Entretien des plantes',
+  'cleaning-and-collection' : 'Nettoyage et ramassage',
+  'watering-and-irrigation' : 'Arrosage et irrigation',
+  'outdoor-cleaning' :'Nettoyage extérieur',
+  'indoor-cleaning' : 'ettoyage intérieur',
+  'waste-and-dust-management' : 'Gestion des déchets et des poussières',
 }
 
 const translateCategoryName = (name?: string) => {

@@ -1466,15 +1466,7 @@ const Bookings = () => {
                           <TableCell>
                             <div className='text-sm'>
                               <div className='font-medium'>
-                                {Math.round(
-                                  ((booking.tool?.basePrice || 0) *
-                                    Math.ceil(
-                                      (new Date(booking.endDate).getTime() -
-                                        new Date(booking.startDate).getTime()) /
-                                        (1000 * 60 * 60 * 24)
-                                    )) * 1.06
-                                )}
-                                €
+                                {(((Number(booking.totalPrice) || 0) * 1.06)).toFixed(2)}€
                               </div>
                             </div>
                           </TableCell>

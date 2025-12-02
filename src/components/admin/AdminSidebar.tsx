@@ -93,15 +93,9 @@ const AdminSidebar = ({ onItemClick }: AdminSidebarProps) => {
       permission: 'manage_transactions',
     },
     {
-      title: 'Retraits',
+      title: 'Portefeuille',
       icon: CreditCard,
       href: '/admin/withdrawals',
-      permission: 'manage_transactions',
-    },
-    {
-      title: 'Remboursements',
-      icon: RefreshCw,
-      href: '/admin/refunds',
       permission: 'manage_transactions',
     },
   ]

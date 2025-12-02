@@ -19,7 +19,7 @@ import {
 } from '@/components/ui/select'
 import { Card, CardContent } from '@/components/ui/card'
 import { Switch } from '@/components/ui/switch'
-import { Save, Loader2, AlertCircle, Edit3 } from 'lucide-react'
+import { Save, Loader2, AlertCircle, Edit3, X } from 'lucide-react'
 import SectionEditor from '@/components/admin/SectionEditor'
 import { newsService } from '@/services/newsService'
 import { IntelligentArticleSaver } from './IntelligentArticleSaver'
@@ -615,9 +615,12 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
   return (
     <Dialog
       open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) requestClose()
+      }}
     >
       <DialogContent className='max-w-[95vw] sm:max-w-[90vw] lg:max-w-6xl max-h-[95vh] overflow-hidden flex flex-col p-0'>
-        <div className='p-4 sm:p-6 border-b'>
+        <div className='p-4 sm:p-6 border-b flex items-center justify-between'>
           <DialogHeader>
             <DialogTitle className='text-lg sm:text-xl lg:text-2xl'>
               {article ? "Modifier l'article" : 'Créer un nouvel article'}
@@ -627,6 +630,7 @@ const BlogEditor = ({ article, isOpen, onClose }: BlogEditorProps) => {
               avec les blocs.
             </DialogDescription>
           </DialogHeader>
+         
         </div>
 
         <div className='flex-1 overflow-y-auto p-4 sm:p-6'>

@@ -130,6 +130,7 @@ export interface Country {
 }
 
 export interface User extends BaseEntity {
+  id: string;
   email: string;
   newEmail?: string;
   isAdmin: boolean;

@@ -44,7 +44,7 @@ class WithdrawalsService {
   // Get all withdrawal requests
   async getWithdrawals(params?: WithdrawalFilterParams): Promise<ApiResponse<PaginatedResponse<WithdrawalRequest>>> {
     const withdrawalParams = {
-      ...params,
+      ...params, 
       status: params?.status
     };
     return await apiClient.get<PaginatedResponse<WithdrawalRequest>>('/admin/withdrawals', { params: withdrawalParams });

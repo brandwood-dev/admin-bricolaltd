@@ -163,7 +163,35 @@ class UserService {
 
   // Wallet Management
   async getUserWallet(id: string): Promise<ApiResponse<Wallet>> {
-    return await apiClient.get<Wallet>(`/users/${id}/wallet`);
+    return await apiClient.get<Wallet>(`/users/${id}`);
+  }
+
+  async getUserWalletBalance(id: string): Promise<number> {
+    console.log('[userService] getUserWalletBalance start', { id })
+    const res = await this.getUserWallet(id)
+    console.log('[userService] getUserWallet response', res)
+    const payload: any = res
+    const balance = payload?.data?.wallet.balance
+    const parsed = Number(balance) || 0
+    console.log('[userService] parsed balance', parsed)
+    return parsed
+  }
+
+  async getOwnerBookingsCount(ownerId: string): Promise<number> {
+    console.log('[userService] getOwnerBookingsCount start', { ownerId })
+    try {
+      const res = await apiClient.get<{ data: any[]; total?: number; meta?: { total: number } }>(`/admin/bookings`, {
+        params: { ownerId, page: 1, limit: 1 },
+      })
+      console.log('[userService] getOwnerBookingsCount response', res)
+      const payload: any = res
+      const total = payload?.data?.data?.total
+      const parsed = Number(total) || 0
+      console.log('[userService] parsed owner bookings count', parsed)
+      return parsed
+    } catch (e) {
+      console.error('[userService] /admin/bookings error', e)
+    }
   }
 
   async adjustUserBalance(id: string, amount: number, reason: string): Promise<ApiResponse<Wallet>> {

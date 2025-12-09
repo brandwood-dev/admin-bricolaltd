@@ -263,11 +263,9 @@ const Transactions: React.FC = () => {
         <td style="padding:8px;border:1px solid #ddd;">${
           t.type === TransactionType.PAYMENT ? 'Réception' : 'Remboursement'
         }</td>
-        <td style="padding:8px;border:1px solid #ddd;">€ ${(typeof t.amount ===
-        'number'
-          ? t.amount
-          : 0
-        ).toFixed(2)}</td>
+        <td style="padding:8px;border:1px solid #ddd;">£ ${Number(
+          t.amount
+        )}</td>
         <td style="padding:8px;border:1px solid #ddd;">${
           t.status === TransactionStatus.COMPLETED
             ? 'Terminée'
@@ -355,7 +353,6 @@ const Transactions: React.FC = () => {
           <div className='flex flex-col md:flex-row gap-4'>
             <div className='flex-1'>
               <div className='relative'>
-                <Search className='absolute left-2 top-2.5 h-4 w-4 text-muted-foreground' />
                 <Input
                   placeholder='Rechercher des transactions par ID ou utilisateur ...'
                   value={searchTerm}
@@ -367,8 +364,20 @@ const Transactions: React.FC = () => {
                       setCurrentPage(1)
                     }
                   }}
-                  className='pl-8'
+                  className='pr-8'
                 />
+                <button
+                  type='button'
+                  onClick={() => {
+                    const q = searchTerm.trim()
+                    setSearchQuery(q.length >= 3 ? q : '')
+                    setCurrentPage(1)
+                  }}
+                  className='absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary'
+                >
+                 
+                  <Search className='h-4 w-4 text-orange-500' />
+                </button>
               </div>
             </div>
             <Select value={statusFilter} onValueChange={setStatusFilter}>
@@ -457,7 +466,7 @@ const Transactions: React.FC = () => {
                     <TableCell>{getTypeBadge(transaction.type)}</TableCell>
                     <TableCell>
                       <div className='font-medium'>
-                        €{(Number(transaction.amount) || 0).toFixed(2)}
+                        £{Number(transaction.amount)}
                       </div>
                     </TableCell>
                     <TableCell>{getStatusBadge(transaction.status)}</TableCell>

@@ -276,7 +276,7 @@ const Users = () => {
     usersLength: users.length,
     loading,
     error,
-  })
+  }) 
 
   // Load user stats (separate cache)
   const [globalUserStats, setGlobalUserStats] = useState<UserStats | null>(null)

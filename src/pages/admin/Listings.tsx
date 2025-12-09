@@ -124,35 +124,37 @@ const CATEGORY_TRANSLATIONS: Record<string, string> = {
 }
 
 const SUBCATEGORY_TRANSLATIONS: Record<string, string> = {
-  'lawn': 'Gazon',
-  'soil': 'Terre',
-  'wood': 'Bois',
-  'tree': 'Arbre',
-  'leaves': 'Feuilles',
-  'fabric': 'Tissu',
-  'water': 'Eau',
-  'dust': 'Poussière',
-  'construction': 'Construction',
-  'electricity': 'Électricité',
-  'painting': 'Peinture',
+  lawn: 'Gazon',
+  soil: 'Terre',
+  wood: 'Bois',
+  tree: 'Arbre',
+  leaves: 'Feuilles',
+  fabric: 'Tissu',
+  water: 'Eau',
+  dust: 'Poussière',
+  construction: 'Construction',
+  electricity: 'Électricité',
+  painting: 'Peinture',
   'screws-and-bolts': 'Vis et Boulons',
   'heavy-load': 'Charge Lourde',
-  'engine': 'Moteur',
-  'wheel': 'Roue',
-  'lighting': 'Éclairage',
-  'kitchen': 'Cuisine',
-  'entertainment-and-games': 'Animation et Jeux',
-  'furniture': 'Mobilier',
-  'decoration': 'Décoration',
-  'structure': 'Structure',
-  'pruning-and-cutting' : 'Taille et coupe',
-  'soil-maintenance' : 'Entretien du sol',
-  'plant-care' : 'Entretien des plantes',
-  'cleaning-and-collection' : 'Nettoyage et ramassage',
-  'watering-and-irrigation' : 'Arrosage et irrigation',
-  'outdoor-cleaning' :'Nettoyage extérieur',
-  'indoor-cleaning' : 'Nettoyage intérieur',
-  'waste-and-dust-management' : 'Gestion des déchets et des poussières',
+  engine: 'Moteur',
+  wheel: 'Roue',
+  lighting: 'Éclairage',
+  kitchen: 'Cuisine',
+  'entertainment-games': 'Animation et Jeux',
+  furniture: 'Mobilier',
+  decoration: 'Décoration',
+  structure: 'Structure',
+  'pruning-and-cutting': 'Taille et coupe',
+  'soil-maintenance': 'Entretien du sol',
+  'plant-care': 'Entretien des plantes',
+  'cleaning-and-collection': 'Nettoyage et ramassage',
+  'watering-and-irrigation': 'Arrosage et irrigation',
+  'outdoor-cleaning': 'Nettoyage extérieur',
+  'indoor-cleaning': 'Nettoyage intérieur',
+  'waste-and-dust-management': 'Gestion des déchets et des poussières',
+  sound: 'Son',
+  cooking: 'Cuisine',
 }
 
 const translateCategoryName = (name?: string) => {
@@ -780,8 +782,6 @@ const RejectDialog = ({ listingId, onReject }: any) => {
   const [selectedReason, setSelectedReason] = useState('')
   const [customMessage, setCustomMessage] = useState('')
 
- 
-
   const handleReject = () => {
     const reason =
       selectedReason === 'Autre (préciser ci-dessous)'
@@ -836,7 +836,6 @@ const RejectDialog = ({ listingId, onReject }: any) => {
                 <SelectItem value='false_or_misleading_information'>
                   False or Misleading Information
                 </SelectItem>
-             
               </SelectContent>
             </Select>
           </div>
@@ -1010,7 +1009,6 @@ const Listings = () => {
       }
     } catch (error) {
       console.error('Error loading subcategories:', error)
-      
     }
   }
 
@@ -1032,7 +1030,6 @@ const Listings = () => {
       }
     } catch (error) {
       console.error('Error loading subcategories for category:', error)
-      
     }
   }
 
@@ -1061,8 +1058,10 @@ const Listings = () => {
         modStatus: moderationStatusParam,
         category: categoryFilter !== 'all' ? categoryFilter : undefined,
         categoryId: categoryFilter !== 'all' ? categoryFilter : undefined,
-        subcategory: subcategoryFilter !== 'all' ? subcategoryFilter : undefined,
-        subcategoryId: subcategoryFilter !== 'all' ? subcategoryFilter : undefined,
+        subcategory:
+          subcategoryFilter !== 'all' ? subcategoryFilter : undefined,
+        subcategoryId:
+          subcategoryFilter !== 'all' ? subcategoryFilter : undefined,
         dateFrom: dateRange?.from ? formatLocalDate(dateRange.from) : undefined,
         dateTo: dateRange?.to ? formatLocalDate(dateRange.to) : undefined,
         page: currentPage,
@@ -1096,7 +1095,7 @@ const Listings = () => {
           // Check address properties
           console.log('Address properties:', {
             pickupAddress: toolsData[0].pickupAddress,
-            })
+          })
         }
 
         const toolsArray = Array.isArray(toolsData) ? toolsData : []
@@ -1149,7 +1148,6 @@ const Listings = () => {
           ? error.message
           : 'Erreur lors du chargement des outils'
       )
-      
 
       // Only show error toast if it's not a network error (API unavailable)
       if (
@@ -1576,11 +1574,13 @@ const Listings = () => {
             >
               <SelectTrigger disabled={categoryFilter === 'all'}>
                 <Filter className='h-4 w-4 mr-2' />
-                <SelectValue placeholder={
-                  categoryFilter === 'all'
-                    ? 'Sélectionnez une catégorie'
-                    : 'Sous-catégorie'
-                } />
+                <SelectValue
+                  placeholder={
+                    categoryFilter === 'all'
+                      ? 'Sélectionnez une catégorie'
+                      : 'Sous-catégorie'
+                  }
+                />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value='all'>Toutes les sous-catégories</SelectItem>
@@ -1674,7 +1674,6 @@ const Listings = () => {
                                   ? `${listing.owner.firstName} ${listing.owner.lastName}`
                                   : 'N/A'}
                               </div>
-                            
                             </div>
                           </div>
                         </TableCell>
@@ -1696,7 +1695,9 @@ const Listings = () => {
                             {listing.subcategory && (
                               <Badge variant='secondary' className='text-xs'>
                                 {listing.subcategory?.displayName ||
-                                  translateSubcategoryName(listing.subcategory?.name)}
+                                  translateSubcategoryName(
+                                    listing.subcategory?.name
+                                  )}
                               </Badge>
                             )}
                           </div>
@@ -1730,11 +1731,11 @@ const Listings = () => {
                         </TableCell>
                         <TableCell>
                           <div className='flex items-center gap-1'>
-                            <ListingDetailsModal 
-                              listing={listing} 
-                              onApprove={handleApprove} 
-                              onReject={handleReject} 
-                              onDelete={handleDelete} 
+                            <ListingDetailsModal
+                              listing={listing}
+                              onApprove={handleApprove}
+                              onReject={handleReject}
+                              onDelete={handleDelete}
                             />
                             {listing.moderationStatus === 'Pending' && (
                               <>

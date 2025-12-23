@@ -63,6 +63,10 @@ class RefundsService {
     return await apiClient.post('/refunds/process', { refundId, amount, adminNotes })
   }
 
+  async createRefundRequest(transactionId: string, amount: number, reason: string, reasonDetails?: string, adminNotes?: string): Promise<ApiResponse<{ success: boolean; refundId?: string }>> {
+    return await apiClient.post('/refunds/request', { transactionId, amount, reason, reasonDetails, adminNotes })
+  }
+
   async processRefundViaWise(refundId: string, amount: number, targetCurrency: string, bankDetails?: { iban: string; bic: string; accountHolderName: string }): Promise<ApiResponse<{ success: boolean; refundId: string; transferId: string; quoteId: string; recipientId?: string }>> {
     return await apiClient.post('/refunds/process-wise', { refundId, amount, targetCurrency, bankDetails })
   }

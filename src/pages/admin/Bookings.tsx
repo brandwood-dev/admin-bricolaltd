@@ -269,7 +269,7 @@ const BookingDetailsModal = ({
               <div className='flex justify-between'>
                 <span className='text-gray-600'>Tarif journalier:</span>
                 <span className='font-semibold'>
-                  {booking.tool.basePrice || 0}€
+                  {booking.tool.basePrice}£
                 </span>
               </div>
               <div className='flex justify-between'>
@@ -278,7 +278,7 @@ const BookingDetailsModal = ({
                   {Math.ceil(
                     (new Date(booking.endDate).getTime() -
                       new Date(booking.startDate).getTime()) /
-                      (1000 * 60 * 60 * 24)
+                      (1000 * 60 * 60 * 24) + 1
                   ) || 0}
                   j
                 </span>
@@ -289,21 +289,16 @@ const BookingDetailsModal = ({
                   {Math.ceil(
                     (new Date(booking.endDate).getTime() -
                       new Date(booking.startDate).getTime()) /
-                      (1000 * 60 * 60 * 24)
+                      (1000 * 60 * 60 * 24) + 1
                   ) * (booking.tool.basePrice || 0)}
-                  €
+                  £
                 </span>
               </div>
               <div className='border-t pt-2'>
                 <div className='flex justify-between'>
                   <span className='font-semibold'>Total facturé:</span>
                   <span className='font-bold text-lg'>
-                    {Math.ceil(
-                      (new Date(booking.endDate).getTime() -
-                        new Date(booking.startDate).getTime()) /
-                        (1000 * 60 * 60 * 24)
-                    ) * (Number(booking.tool.basePrice) || 0)}
-                    €
+                    {booking.totalPrice}£
                   </span>
                 </div>
               </div>
@@ -998,7 +993,6 @@ const Bookings = () => {
             onDateChange={setDateRange}
             placeholder='Filtrer par période de réservation'
           />
-          
         </div>
       </div>
 
@@ -1466,7 +1460,7 @@ const Bookings = () => {
                           <TableCell>
                             <div className='text-sm'>
                               <div className='font-medium'>
-                                {(((Number(booking.totalPrice) || 0) * 1.06)).toFixed(2)}€
+                                {booking.totalPrice}£
                               </div>
                             </div>
                           </TableCell>

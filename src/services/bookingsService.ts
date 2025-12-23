@@ -140,7 +140,13 @@ class BookingsService {
   async sendBookingNotification(id: string, type: 'reminder' | 'update' | 'confirmation', message?: string): Promise<ApiResponse<null>> {
     return await apiClient.post<null>(`/bookings/${id}/notify`, { type, message });
   }
+  
+  async payoutBooking(id: string): Promise<ApiResponse<{ message: string; data: Booking }>> {
+    return await apiClient.patch<{ message: string; data: Booking }>(`/bookings/admin/${id}/payout`)
+  }
 }
+
+
 
 export const bookingsService = new BookingsService();
 export default bookingsService;

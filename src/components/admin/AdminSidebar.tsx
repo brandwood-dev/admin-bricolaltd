@@ -208,7 +208,7 @@ const AdminSidebar = ({ onItemClick }: AdminSidebarProps) => {
         <Separator className='my-4' />
 
         {/* System Management */}
-        {renderMenuSection(systemItems, 'Système')}
+        {/* {renderMenuSection(systemItems, 'Système')} */}
       </nav>
 
       {/* Logout button */}

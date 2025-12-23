@@ -74,7 +74,7 @@ class DisputesService {
   async updateDispute(id: string, data: {
     adminId?: string;
     status?: DisputeStatus;
-    adminNotes?: string;
+    resolutionNotes?: string;
     resolution?: string;
   }): Promise<ApiResponse<Dispute>> {
     return await apiClient.patch<Dispute>(`/disputes/${id}`, data);
@@ -117,13 +117,10 @@ class DisputesService {
 
   // Dispute Resolution
   async resolveDispute(data: DisputeResolution): Promise<ApiResponse<Dispute>> {
-    // First update the dispute with resolution notes and amount
     await this.updateDispute(data.disputeId, {
-      adminNotes: data.adminNotes || data.reason,
+      resolutionNotes: data.adminNotes || data.reason,
       resolution: data.resolution
     });
-    
-    // Then mark as resolved
     return await apiClient.patch<Dispute>(`/disputes/${data.disputeId}/status/resolved`);
   }
 

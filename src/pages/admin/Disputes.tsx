@@ -306,13 +306,18 @@ const Disputes = () => {
       missing: 0,
     })
 
-    const [resolution, setResolution] = useState('')
+    const [resolution, setResolution] = useState(dispute.resolutionNotes || '')
     const [selectedImageIndex, setSelectedImageIndex] = useState<number | null>(
       null
     )
 
+    // Update resolution when dispute changes
+    useEffect(() => {
+      setResolution(dispute.resolutionNotes || '')
+    }, [dispute.resolutionNotes])
+
     const distribution = calculateDamageDistribution(
-      dispute.deposit || 0,
+      dispute.tool?.depositAmount || 0,
       localAssessment
     )
 
@@ -383,7 +388,15 @@ const Disputes = () => {
                         Caution
                       </Label>
                       <p className='font-semibold'>
-                        {dispute.tool.depositAmount}€
+                        {dispute.tool?.depositAmount ?? 0}€
+                      </p>
+                    </div>
+                    <div>
+                      <Label className='text-sm font-medium text-gray-600'>
+                        Statut réservation
+                      </Label>
+                      <p className='font-semibold'>
+                        {dispute.booking?.status || 'N/A'}
                       </p>
                     </div>
                     <div>
@@ -527,15 +540,19 @@ const Disputes = () => {
                                 Durée totale:
                               </span>
                               <p className='font-medium'>
-                               {/* calculer la durée en jours date fin - date debut*/}
-                               {dispute.booking?.endDate &&
-                               dispute.booking?.startDate
-                                 ? `${
-                                     (new Date(dispute.booking.endDate).getTime() -
-                                     new Date(dispute.booking.startDate).getTime()) /
-                                     (1000 * 60 * 60 * 24)
-                                   } jours`
-                                 : 'N/A'}
+                                {/* calculer la durée en jours date fin - date debut*/}
+                                {dispute.booking?.endDate &&
+                                dispute.booking?.startDate
+                                  ? `${
+                                      (new Date(
+                                        dispute.booking.endDate
+                                      ).getTime() -
+                                        new Date(
+                                          dispute.booking.startDate
+                                        ).getTime()) /
+                                      (1000 * 60 * 60 * 24)
+                                    } jours`
+                                  : 'N/A'}
                               </p>
                             </div>
                           </div>
@@ -659,7 +676,7 @@ const Disputes = () => {
                             {localAssessment.cosmetic +
                               localAssessment.functional +
                               localAssessment.missing}
-                            % de {dispute.deposit}€
+                            % de {dispute.tool?.depositAmount || 0}€
                           </div>
                         </div>
                         <div className='p-3 bg-green-50 rounded-lg'>
@@ -703,12 +720,11 @@ const Disputes = () => {
                     <Button
                       variant='outline'
                       onClick={async () => {
-                        const { toast } = useToast()
                         try {
                           const res = await disputesService.updateDispute(
                             dispute.id,
                             {
-                              adminNotes: resolution,
+                              resolutionNotes: resolution,
                             }
                           )
                           if (res.success) {
@@ -716,19 +732,173 @@ const Disputes = () => {
                               title: 'Succès',
                               description: 'Note enregistrée',
                             })
+                            loadDisputes()
                           }
-                        } catch (e) {}
+                        } catch (e) {
+                          toast({
+                            title: 'Erreur',
+                            description: "Impossible d'enregistrer la note",
+                            variant: 'destructive',
+                          })
+                        }
                       }}
                     >
                       Enregistrer la note
                     </Button>
                     {(dispute.bookingStatus === 'ACCEPTED' ||
                       dispute.booking?.status === 'ACCEPTED') && (
-                      <Button variant='outline'>Payer le propriétaire</Button>
+                      <Button
+                        variant='outline'
+                        onClick={async () => {
+                          try {
+                            const { transactionsService } = await import(
+                              '@/services/transactionsService'
+                            )
+                            const { refundsService } = await import(
+                              '@/services/refundsService'
+                            )
+
+                            if (!dispute.booking?.id) {
+                              toast({
+                                title: 'Erreur',
+                                description:
+                                  'Réservation introuvable pour ce litige',
+                                variant: 'destructive',
+                              })
+                              return
+                            }
+                            const txRes =
+                              await transactionsService.getByBookingId(
+                                dispute.booking.id
+                              )
+                            const transactions = txRes.data || []
+                            const paymentTx = transactions.find(
+                              (t: any) =>
+                                (t.type === 'PAYMENT' ||
+                                  t.type === 'payment') &&
+                                t.externalReference
+                            )
+                            if (!paymentTx) {
+                              toast({
+                                title: 'Erreur',
+                                description:
+                                  'Aucune transaction de paiement trouvée pour cette réservation',
+                                variant: 'destructive',
+                              })
+                              return
+                            }
+
+                            const amount =
+                              resolutionAmount > 0
+                                ? resolutionAmount
+                                : Math.max(
+                                    0,
+                                    calculateDamageDistribution(
+                                      dispute.tool?.depositAmount || 0,
+                                      localAssessment
+                                    ).refundAmount
+                                  )
+                            const createRes =
+                              await refundsService.createRefundRequest(
+                                paymentTx.id,
+                                amount,
+                                'DISPUTE_RESOLUTION',
+                                resolution,
+                                resolution
+                              )
+                            if (
+                              !createRes.success ||
+                              !createRes.data?.refundId
+                            ) {
+                              toast({
+                                title: 'Erreur',
+                                description:
+                                  'Création de la demande de remboursement échouée',
+                                variant: 'destructive',
+                              })
+                              return
+                            }
+                            const processRes =
+                              await refundsService.processRefund(
+                                createRes.data.refundId,
+                                amount,
+                                resolution
+                              )
+                            if (processRes.success) {
+                              toast({
+                                title: 'Succès',
+                                description: 'Remboursement effectué',
+                              })
+                              loadDisputes()
+                            } else {
+                              toast({
+                                title: 'Erreur',
+                                description:
+                                  processRes.message ||
+                                  'Échec du remboursement',
+                                variant: 'destructive',
+                              })
+                            }
+                          } catch (err) {
+                            toast({
+                              title: 'Erreur',
+                              description:
+                                'Impossible de traiter le remboursement',
+                              variant: 'destructive',
+                            })
+                          }
+                        }}
+                      >
+                        Rembourser le locataire
+                      </Button>
                     )}
                     {(dispute.bookingStatus === 'ACCEPTED' ||
                       dispute.booking?.status === 'ACCEPTED') && (
-                      <Button variant='outline'>Rembourser le locataire</Button>
+                      <Button
+                        variant='outline'
+                        onClick={async () => {
+                          try {
+                            const { bookingsService } = await import(
+                              '@/services/bookingsService'
+                            )
+                            if (!dispute.booking?.id) {
+                              toast({
+                                title: 'Erreur',
+                                description:
+                                  'Réservation introuvable pour ce litige',
+                                variant: 'destructive',
+                              })
+                              return
+                            }
+                            const res = await bookingsService.payoutBooking(
+                              dispute.booking.id
+                            )
+                            if (res.success) {
+                              toast({
+                                title: 'Succès',
+                                description:
+                                  'Paiement au propriétaire effectué',
+                              })
+                              loadDisputes()
+                            } else {
+                              toast({
+                                title: 'Erreur',
+                                description:
+                                  'Échec du paiement au propriétaire',
+                                variant: 'destructive',
+                              })
+                            }
+                          } catch (e) {
+                            toast({
+                              title: 'Erreur',
+                              description: "Impossible d'effectuer le paiement",
+                              variant: 'destructive',
+                            })
+                          }
+                        }}
+                      >
+                        Payer le propriétaire
+                      </Button>
                     )}
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
@@ -857,84 +1027,11 @@ const Disputes = () => {
     )
   }
 
-  // Use real data from API
+  // Use API-driven pagination and data only
   const displayDisputes = disputes
-
-  const filteredDisputes = displayDisputes.filter((dispute) => {
-    const matchesSearch =
-      searchTerm === '' ||
-      dispute.id.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      dispute.tool?.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      dispute.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (dispute.respondent?.firstName && dispute.respondent?.lastName
-        ? `${dispute.respondent.firstName} ${dispute.respondent.lastName}`
-        : dispute.respondent?.displayName || ''
-      )
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase()) ||
-      (dispute.initiator?.firstName && dispute.initiator?.lastName
-        ? `${dispute.initiator.firstName} ${dispute.initiator.lastName}`
-        : dispute.initiator?.displayName || ''
-      )
-        .toLowerCase()
-        .includes(searchTerm.toLowerCase())
-
-    const matchesStatus =
-      statusFilter === 'all' || dispute.status === statusFilter
-    const matchesCategory =
-      categoryFilter === 'all' || dispute.category === categoryFilter
-    const matchesPriority =
-      priorityFilter === 'all' || dispute.priority === priorityFilter
-
-    const matchesDate = (() => {
-      if (!dateRange || (!dateRange.from && !dateRange.to)) return true
-      const created = new Date(dispute.createdAt)
-      const start = dateRange?.from
-        ? new Date(
-            dateRange!.from!.getFullYear(),
-            dateRange!.from!.getMonth(),
-            dateRange!.from!.getDate(),
-            0,
-            0,
-            0,
-            0
-          )
-        : undefined
-      const end = dateRange?.to
-        ? new Date(
-            dateRange!.to!.getFullYear(),
-            dateRange!.to!.getMonth(),
-            dateRange!.to!.getDate(),
-            23,
-            59,
-            59,
-            999
-          )
-        : undefined
-      if (start && created < start) return false
-      if (end && created > end) return false
-      return true
-    })()
-
-    return (
-      matchesSearch &&
-      matchesStatus &&
-      matchesCategory &&
-      matchesPriority &&
-      matchesDate
-    )
-  })
-
-  // Use API pagination if available, otherwise use client-side pagination
-  const displayTotalPages =
-    totalPages > 0
-      ? totalPages
-      : Math.ceil(filteredDisputes.length / itemsPerPage)
+  const displayTotalPages = totalPages > 0 ? totalPages : 1
   const startIndex = (currentPage - 1) * itemsPerPage
-  const paginatedDisputes = filteredDisputes.slice(
-    startIndex,
-    startIndex + itemsPerPage
-  )
+  const paginatedDisputes = displayDisputes
 
   return (
     <div className='space-y-6'>
@@ -1046,7 +1143,7 @@ const Disputes = () => {
       {/* Disputes Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Litiges ({filteredDisputes.length})</CardTitle>
+          <CardTitle>Litiges ({totalItems})</CardTitle>
         </CardHeader>
         <CardContent>
           <div className='overflow-x-auto'>
@@ -1128,17 +1225,12 @@ const Disputes = () => {
           {/* Pagination */}
           <div className='flex items-center justify-between mt-6'>
             <div className='text-sm text-gray-500'>
-              {disputes.length > 0
-                ? `Affichage de ${
-                    (currentPage - 1) * itemsPerPage + 1
-                  } à ${Math.min(
-                    currentPage * itemsPerPage,
-                    totalItems
-                  )} sur ${totalItems} litiges`
-                : `Affichage de ${startIndex + 1} à ${Math.min(
-                    startIndex + itemsPerPage,
-                    filteredDisputes.length
-                  )} sur ${filteredDisputes.length} litiges`}
+              {`Affichage de ${
+                (currentPage - 1) * itemsPerPage + 1
+              } à ${Math.min(
+                currentPage * itemsPerPage,
+                totalItems
+              )} sur ${totalItems} litiges`}
             </div>
             <div className='flex items-center gap-2'>
               <Button

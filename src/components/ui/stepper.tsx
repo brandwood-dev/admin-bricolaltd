@@ -94,7 +94,7 @@ export const Stepper: React.FC<StepperProps> = ({ steps, className }) => {
                   </h3>
                   {step.date && (
                     <time className="text-xs text-muted-foreground">
-                      {step.date}
+{new Date(step.date).toLocaleString('ja', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).replace(/\//g, '/')}
                     </time>
                   )}
                 </div>

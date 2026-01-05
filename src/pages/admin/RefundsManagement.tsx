@@ -115,6 +115,10 @@ interface Refund {
       email: string
       phoneNumber: string
     }
+    tool?: {
+      id: string
+      title: string
+    }
   }
 }
 
@@ -195,6 +199,7 @@ const RefundsManagement: React.FC = () => {
           ? top.meta.totalPages
           : 1
       setRefunds(refundsList)
+      console.log('refundsList', refundsList)
       setTotalPages(totalPagesVal)
 
       try {
@@ -658,14 +663,16 @@ const RefundsManagement: React.FC = () => {
                             <div className='font-medium'>
                               {refund.booking?.renter ? (
                                 `${refund.booking.renter.firstName} ${refund.booking.renter.lastName}`
-                              ) : refund.booking?.userName ? (
-                                refund.booking.userName
+                              ) : refund.transaction?.recipient ? (
+                                `${refund.transaction.recipient.firstName} ${refund.transaction.recipient.lastName}`
+                              ) : refund.transaction?.sender ? (
+                                `${refund.transaction.sender.firstName} ${refund.transaction.sender.lastName}`
                               ) : (
                                 <span className='text-muted-foreground'>-</span>
                               )}
                             </div>
                             <div className='text-sm text-muted-foreground'>
-                              {refund.booking?.toolName || '-'}
+                              {refund.booking?.tool?.title || '-'}
                             </div>
                           </div>
                         </TableCell>
@@ -1134,13 +1141,17 @@ const RefundsManagement: React.FC = () => {
                     <div className='flex justify-between'>
                       <span>Outil:</span>
                       <span className='font-medium'>
-                        {selectedRefund.booking.toolName}
+                        {(selectedRefund.booking as any)?.tool?.title ||
+                          selectedRefund.booking.toolName ||
+                          '-'}
                       </span>
                     </div>
                     <div className='flex justify-between'>
                       <span>Utilisateur:</span>
                       <span className='font-medium'>
-                        {selectedRefund.booking.userName}
+                        {selectedRefund.booking?.renter
+                          ? `${selectedRefund.booking.renter.firstName} ${selectedRefund.booking.renter.lastName}`
+                          : selectedRefund.booking.userName || '-'}
                       </span>
                     </div>
                     <div className='flex justify-between'>

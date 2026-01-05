@@ -248,23 +248,24 @@ export interface ToolPhoto extends BaseEntity {
 }
 
 export interface Booking extends BaseEntity {
-  startDate: Date | string;
-  endDate: Date | string;
-  pickupHour: Date | string;
-  totalPrice: number;
-  message?: string;
-  paymentMethod?: string;
-  status: BookingStatus;
-  
+  startDate: Date | string
+  endDate: Date | string
+  pickupHour: Date | string
+  totalPrice: number
+  message?: string
+  paymentMethod?: string
+  paymentIntentId?: string
+  status: BookingStatus
+
   // Foreign Keys
-  toolId: string;
-  renterId: string;
-  ownerId: string;
-  
+  toolId: string
+  renterId: string
+  ownerId: string
+
   // Relationships
-  tool?: Tool;
-  renter?: User;
-  owner?: User;
+  tool?: Tool
+  renter?: User
+  owner?: User
 }
 
 export interface Transaction extends BaseEntity {

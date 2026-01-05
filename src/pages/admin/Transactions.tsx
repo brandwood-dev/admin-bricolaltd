@@ -84,18 +84,26 @@ const Transactions: React.FC = () => {
     const fetchTransactions = async () => {
       try {
         setLoading(true)
-        const startISO = dateRange.from
+        const startISO = dateRange?.from
           ? new Date(
               dateRange.from.getFullYear(),
               dateRange.from.getMonth(),
-              dateRange.from.getDate()
+              dateRange.from.getDate(),
+              0,
+              0,
+              0,
+              0
             ).toISOString()
           : undefined
-        const endISO = dateRange.to
+        const endISO = dateRange?.to
           ? new Date(
               dateRange.to.getFullYear(),
               dateRange.to.getMonth(),
-              dateRange.to.getDate()
+              dateRange.to.getDate(),
+              23,
+              59,
+              59,
+              999
             ).toISOString()
           : undefined
 
@@ -110,18 +118,22 @@ const Transactions: React.FC = () => {
               : undefined
             : undefined
         const typeParam =
-          typeFilter === 'refund'
-            ? TransactionStatus.FAILED && TransactionType.REFUND
-            : typeFilter === 'payment'
-            ? ('RENTAL_INCOME' as any)
+          typeFilter !== 'all'
+            ? typeFilter === 'refund'
+              ? TransactionType.REFUND
+              : typeFilter === 'payment'
+              ? TransactionType.PAYMENT
+              : typeFilter === 'withdrawal'
+              ? TransactionType.WITHDRAWAL
+              : undefined
             : undefined
 
         const filters = {
           search: searchQuery || undefined,
           status: statusParam,
           type: typeParam,
-          start_date: startISO,
-          end_date: endISO,
+          startDate: startISO,
+          endDate: endISO,
           page: currentPage,
           limit: itemsPerPage,
         }
@@ -375,7 +387,6 @@ const Transactions: React.FC = () => {
                   }}
                   className='absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary'
                 >
-                 
                   <Search className='h-4 w-4 text-orange-500' />
                 </button>
               </div>
@@ -399,6 +410,7 @@ const Transactions: React.FC = () => {
                 <SelectItem value='all'>Tous les types</SelectItem>
                 <SelectItem value={'payment'}>Réception</SelectItem>
                 <SelectItem value={'refund'}>Remboursement</SelectItem>
+                <SelectItem value={'withdrawal'}>Retrait</SelectItem>
               </SelectContent>
             </Select>
             <DateRangePicker date={dateRange} onDateChange={setDateRange} />

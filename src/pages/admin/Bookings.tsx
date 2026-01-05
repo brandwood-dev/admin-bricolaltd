@@ -268,9 +268,7 @@ const BookingDetailsModal = ({
             <CardContent className='space-y-3'>
               <div className='flex justify-between'>
                 <span className='text-gray-600'>Tarif journalier:</span>
-                <span className='font-semibold'>
-                  {booking.tool.basePrice}£
-                </span>
+                <span className='font-semibold'>{booking.tool.basePrice}£</span>
               </div>
               <div className='flex justify-between'>
                 <span className='text-gray-600'>Durée:</span>
@@ -278,7 +276,8 @@ const BookingDetailsModal = ({
                   {Math.ceil(
                     (new Date(booking.endDate).getTime() -
                       new Date(booking.startDate).getTime()) /
-                      (1000 * 60 * 60 * 24) + 1
+                      (1000 * 60 * 60 * 24) +
+                      1
                   ) || 0}
                   j
                 </span>
@@ -286,11 +285,14 @@ const BookingDetailsModal = ({
               <div className='flex justify-between'>
                 <span className='text-gray-600'>Sous-total:</span>
                 <span className='font-semibold'>
-                  {Math.ceil(
-                    (new Date(booking.endDate).getTime() -
-                      new Date(booking.startDate).getTime()) /
-                      (1000 * 60 * 60 * 24) + 1
-                  ) * (booking.tool.basePrice || 0)}
+                  {(
+                    Math.ceil(
+                      (new Date(booking.endDate).getTime() -
+                        new Date(booking.startDate).getTime()) /
+                        (1000 * 60 * 60 * 24) +
+                        1
+                    ) * Number(booking.tool?.basePrice || 0)
+                  ).toFixed(2)}
                   £
                 </span>
               </div>
@@ -343,7 +345,6 @@ const BookingDetailsModal = ({
                   {booking.renter?.phoneNumber || 'Non spécifié'}
                 </p>
               </div>
-              
             </CardContent>
           </Card>
 
@@ -387,7 +388,6 @@ const BookingDetailsModal = ({
                     'Non spécifié'}
                 </p>
               </div>
-              
             </CardContent>
           </Card>
 
@@ -910,7 +910,10 @@ const Bookings = () => {
     }
 
     // En cours
-    if (booking.status === BookingStatus.ONGOING || booking.status === BookingStatus.COMPLETED) {
+    if (
+      booking.status === BookingStatus.ONGOING ||
+      booking.status === BookingStatus.COMPLETED
+    ) {
       steps.push({
         id: 'ongoing',
         label: 'En cours',

@@ -115,7 +115,7 @@ class BookingsService {
 
   // Bulk operations
   async bulkUpdateBookings(bookingIds: string[], action: 'accept' | 'cancel' | 'complete', data?: BookingActionData): Promise<ApiResponse<{ success: number; failed: number; errors: string[] }>> {
-    return await apiClient.post<{ success: number; failed: number; errors: string[] }>('/admin/bookings/bulk-action', {
+    return await apiClient.post<{ success: number; failed: number; errors: string[] }>('/bookings/admin/bulk-action', {
       bookingIds,
       action,
       ...data

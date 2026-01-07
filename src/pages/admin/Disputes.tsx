@@ -74,7 +74,10 @@ import {
   PaginatedResponse,
   DisputeStatus,
 } from '@/types/unified-bridge'
-
+import { paymentsService } from '@/services/paymentsService'
+import { transactionsService } from '@/services/transactionsService'
+import { refundsService } from '@/services/refundsService'
+import { bookingsService } from '@/services/bookingsService'
 const Disputes = () => {
   const [disputes, setDisputes] = useState<Dispute[]>([])
   const [disputeStats, setDisputeStats] = useState<DisputeStats | null>(null)
@@ -99,6 +102,7 @@ const Disputes = () => {
   const [resolutionAmount, setResolutionAmount] = useState(0)
   const itemsPerPage = 10
   const { toast } = useToast()
+  const [refundsCache, setRefundsCache] = useState<Record<string, boolean>>({})
 
   // Load disputes data
   const loadDisputes = async () => {
@@ -301,8 +305,7 @@ const Disputes = () => {
       dirty: 'Outil sale/non nettoyé',
       poor_condition: 'Outil en mauvais état ou défectueux',
       poor_condition_tool: 'Outil en mauvais état ou défectueux',
-      inappropriate_behavior: 'Comportement inapproprié',
-      fraud_attempt: 'Tentative de fraude',
+      fraud: 'Tentative de fraude',
       no_showup: 'Locataire absent au rendez-vous',
       no_show: 'Locataire absent au rendez-vous',
       late_return: 'Retour en retard',
@@ -311,6 +314,16 @@ const Disputes = () => {
       service_issue: 'Problème de service',
       duplicate_payment: 'Paiement en double',
       admin_decision: 'Décision administrateur',
+      not_compliant: 'Outil non conforme à lannonce',
+      delay: 'Retard de livraison / récupération',
+      unsafe: 'Outil dangereux / non sécurisé',
+      inappropriate: 'Comportement inapproprié du propriétaire',
+      no_response: 'Pas de réponse du propriétaire',
+      wrong_contact: 'Numéro incorrect / injoignable',
+      suspicious: 'Demande suspecte ou frauduleuse',
+      behavior: 'Comportement inapproprié du client',
+      terms: 'Violation des conditions d`utilisation',
+      contact: 'Numéro de téléphone incorrect / injoignable',
       other: 'Autre',
     }
     return map[r] || reason || 'Non spécifié'
@@ -329,7 +342,118 @@ const Disputes = () => {
       adminFee: 0,
     }
   }
+  const rembourser_locataire = async (dispute: any) => {
+    const bookingId = dispute?.booking?.id
+    if (!bookingId) return
+    try {
+      const check = await refundsService.getAllRefunds({
+        bookingId,
+        status: 'COMPLETED',
+        limit: 1,
+      })
+      const alreadyRefunded =
+        check.success && (check.data?.refunds?.length || 0) > 0
+      if (alreadyRefunded) {
+        setRefundsCache((prev) => ({ ...prev, [bookingId]: true }))
+        toast({ title: 'Info', description: 'Locataire déjà remboursé' })
+        return
+      }
+    } catch {}
 
+    try {
+      const resUpdate = await bookingsService.cancelBooking(bookingId, {
+        reason: 'Booking cancelled after dispute',
+        cancellationMessage:
+          'Une réclamation a été fait et résolue par l`administrateur. Le locataire a été remboursé avec succès. ',
+      })
+      console.log('resUpdate', resUpdate)
+      if (!resUpdate.success) {
+        toast({
+          title: 'Erreur',
+          description:
+            resUpdate.message || "Échec de l'annulation de la réservation",
+          variant: 'destructive',
+        })
+        return
+      }
+
+      const details = (resUpdate.data as any)?.steps
+      console.log('details', details)
+      const stripeMsg = details?.stripeRefund?.succeeded
+        ? 'Remboursement Stripe effectué'
+        : details?.stripeRefund?.alreadyRefunded
+        ? 'Remboursement déjà effectué'
+        : 'Aucun remboursement Stripe'
+      const dbMsg = details?.dbRefund?.created
+        ? 'Remboursement enregistré'
+        : details?.dbRefund?.existsAlready
+        ? 'Remboursement déjà existant'
+        : 'Aucun enregistrement créé'
+      const ownerAmt = Number(
+        details?.wallets?.ownerPendingRemoved ?? 0
+      ).toFixed(2)
+      const adminAmt = Number(
+        details?.wallets?.adminPendingRemoved ?? 0
+      ).toFixed(2)
+      toast({
+        title: 'Résultat',
+        description: `Annulation OK\n${stripeMsg}\n${dbMsg}\nComptes: Owner -${ownerAmt}€, Admin -${adminAmt}€`,
+      })
+
+      setRefundsCache((prev) => ({
+        ...prev,
+        [bookingId]: Boolean(
+          details?.dbRefund?.created || details?.dbRefund?.existsAlready
+        ),
+      }))
+
+      try {
+        const resolved = await disputesService.markAsResolved(dispute.id)
+        if (resolved.success) {
+          toast({ title: 'Litige', description: 'Statut mis à RESOLVED' })
+        }
+      } catch (err: any) {
+        toast({
+          title: 'Erreur',
+          description: err?.message || 'Échec de la mise à jour du litige',
+          variant: 'destructive',
+        })
+      }
+
+      try {
+        const updated = await bookingsService.updateBooking(bookingId, {
+          hasActiveClaim: false,
+        })
+        if (updated.success) {
+          toast({
+            title: 'Réservation',
+            description: 'Réclamation désactivée',
+          })
+        }
+      } catch (err: any) {
+        toast({
+          title: 'Erreur',
+          description:
+            err?.message || 'Échec de la mise à jour de la réservation',
+          variant: 'destructive',
+        })
+      }
+
+      // await bookingsService.sendBookingNotification(
+      //   bookingId,
+      //   'update',
+      //   'Réservation annulée après litige. Le locataire a été remboursé.'
+      // )
+      await loadDisputeDetails(dispute.id)
+      loadDisputes()
+    } catch (err: any) {
+      toast({
+        title: 'Erreur',
+        description: err?.message || 'Échec de l’opération',
+        variant: 'destructive',
+      })
+    }
+  }
   const DisputeDetailsModal = ({ dispute }: { dispute: any }) => {
     const [localAssessment, setLocalAssessment] = useState({
       cosmetic: 0,
@@ -796,7 +920,17 @@ const Disputes = () => {
                       dispute.booking?.status === 'ACCEPTED') && (
                       <AlertDialog>
                         <AlertDialogTrigger asChild>
-                          <Button variant='outline'>
+                          <Button
+                            variant='outline'
+                            disabled={
+                              Boolean(refundsCache[dispute.booking?.id]) ||
+                              Boolean(
+                                dispute.bookingRefunds?.some?.(
+                                  (r: any) => r.status === 'COMPLETED'
+                                )
+                              )
+                            }
+                          >
                             Rembourser le locataire
                           </Button>
                         </AlertDialogTrigger>
@@ -808,234 +942,20 @@ const Disputes = () => {
                             <AlertDialogDescription>
                               Cette action remboursera le locataire et annulera
                               la réservation. Confirmez-vous ?
+                              {dispute.bookingRefunds?.some?.(
+                                (r: any) => r.status === 'COMPLETED'
+                              ) && (
+                                <div className='mt-2 text-xs text-muted-foreground'>
+                                  Locataire déjà remboursé
+                                </div>
+                              )}
                             </AlertDialogDescription>
                           </AlertDialogHeader>
                           <AlertDialogFooter>
                             <AlertDialogCancel>Annuler</AlertDialogCancel>
                             <AlertDialogAction
                               onClick={async () => {
-                                try {
-                                  const { paymentsService } = await import(
-                                    '@/services/paymentsService'
-                                  )
-                                  const { transactionsService } = await import(
-                                    '@/services/transactionsService'
-                                  )
-                                  const { refundsService } = await import(
-                                    '@/services/refundsService'
-                                  )
-                                  const { bookingsService } = await import(
-                                    '@/services/bookingsService'
-                                  )
-
-                                  if (!dispute.booking?.id) {
-                                    toast({
-                                      title: 'Erreur',
-                                      description:
-                                        'Réservation introuvable pour ce litige',
-                                      variant: 'destructive',
-                                    })
-                                    return
-                                  }
-
-                                  const amount = dispute.booking?.totalPrice
-
-                                  if (dispute.booking.paymentIntentId) {
-                                    try {
-                                      const res =
-                                        await paymentsService.refundPaymentIntent(
-                                          dispute.booking.paymentIntentId,
-                                          amount,
-                                          'requested_by_customer'
-                                        )
-                                      if ((res as any)?.success) {
-                                        toast({
-                                          title: 'Succès',
-                                          description:
-                                            'Remboursement effectué et réservation annulée',
-                                        })
-                                        const resUpdate =
-                                          await bookingsService.bulkUpdateBookings(
-                                            [dispute.booking.id],
-                                            'cancel',
-                                            {
-                                              reason:
-                                                'Booking cancelled after dispute',
-                                              adminNotes:
-                                                'Une réclamation a été fait et résolue par l`administrateur. Le locataire a été remboursé avec succès. ',
-                                            }
-                                          )
-                                        if (
-                                          !resUpdate.success ||
-                                          (resUpdate.data &&
-                                            resUpdate.data.failed > 0)
-                                        ) {
-                                          toast({
-                                            title: 'Erreur',
-                                            description:
-                                              resUpdate.message ||
-                                              "Échec de l'annulation de la réservation",
-                                            variant: 'destructive',
-                                          })
-                                        } else {
-                                          await bookingsService.sendBookingNotification(
-                                            dispute.booking.id,
-                                            'update',
-                                            'Réservation annulée après litige. Le locataire a été remboursé.'
-                                          )
-                                          await loadDisputeDetails(dispute.id)
-                                          loadDisputes()
-                                        }
-                                        return
-                                      }
-                                    } catch (err: any) {
-                                      const msg =
-                                        err?.response?.data?.message ||
-                                        err?.message ||
-                                        'Échec du remboursement Stripe'
-                                      // Ne pas afficher le toast spécifique de remboursement déjà effectué
-                                      if (
-                                        !msg.includes('already been refunded')
-                                      ) {
-                                        toast({
-                                          title: 'Erreur',
-                                          description: msg,
-                                          variant: 'destructive',
-                                        })
-                                      }
-                                      if (
-                                        msg.includes('already been refunded')
-                                      ) {
-                                        const resUpdate =
-                                          await bookingsService.bulkUpdateBookings(
-                                            [dispute.booking.id],
-                                            'cancel',
-                                            {
-                                              reason:
-                                                'Booking cancelled after dispute',
-                                              adminNotes:
-                                                'Une réclamation a été fait et résolue par l’administrateur. Le locataire a été remboursé avec succès. ',
-                                            }
-                                          )
-                                        if (
-                                          !resUpdate.success ||
-                                          (resUpdate.data &&
-                                            resUpdate.data.failed > 0)
-                                        ) {
-                                          toast({
-                                            title: 'Erreur',
-                                            description:
-                                              resUpdate.message ||
-                                              "Échec de l'annulation de la réservation",
-                                            variant: 'destructive',
-                                          })
-                                        } else {
-                                          await bookingsService.sendBookingNotification(
-                                            dispute.booking.id,
-                                            'update',
-                                            'Réservation annulée après litige. Le locataire a été remboursé.'
-                                          )
-                                          toast({
-                                            title: 'Succès',
-                                            description:
-                                              'Réservation annulée (remboursement déjà effectué auparavant)',
-                                          })
-                                          await loadDisputeDetails(dispute.id)
-                                          loadDisputes()
-                                        }
-                                        return
-                                      }
-                                    }
-                                  }
-
-                                  const txRes =
-                                    await transactionsService.getByBookingId(
-                                      dispute.booking.id
-                                    )
-                                  const transactions =
-                                    (txRes as any)?.data || []
-                                  const paymentTx = transactions.find(
-                                    (t: any) =>
-                                      (t.type === 'PAYMENT' ||
-                                        t.type === 'payment') &&
-                                      t.externalReference
-                                  )
-                                  if (!paymentTx) {
-                                    toast({
-                                      title: 'Erreur',
-                                      description:
-                                        'Transaction de paiement introuvable pour la réservation',
-                                      variant: 'destructive',
-                                    })
-                                    return
-                                  }
-                                  const createRes =
-                                    await refundsService.createRefundRequest(
-                                      paymentTx.id,
-                                      amount,
-                                      'DISPUTE_RESOLUTION',
-                                      resolution,
-                                      resolution
-                                    )
-                                  if (
-                                    !createRes.success ||
-                                    !createRes.data?.refundId
-                                  ) {
-                                    toast({
-                                      title: 'Erreur',
-                                      description:
-                                        'Création de la demande de remboursement échouée',
-                                      variant: 'destructive',
-                                    })
-                                    return
-                                  }
-                                  const processRes =
-                                    await refundsService.processRefund(
-                                      createRes.data.refundId,
-                                      amount,
-                                      resolution
-                                    )
-                                  if (processRes.success) {
-                                    toast({
-                                      title: 'Succès',
-                                      description: 'Remboursement effectué',
-                                    })
-                                    await bookingsService.bulkUpdateBookings(
-                                      [dispute.booking.id],
-                                      'cancel',
-                                      {
-                                        reason:
-                                          'Booking cancelled after dispute',
-                                        adminNotes:
-                                          'Une réclamation a été fait et résolue par l’administrateur. Le locataire a été remboursé avec succès. ',
-                                      }
-                                    )
-                                    await bookingsService.sendBookingNotification(
-                                      dispute.booking.id,
-                                      'update',
-                                      'Réservation annulée après litige. Le locataire a été remboursé.'
-                                    )
-                                    loadDisputes()
-                                  } else {
-                                    toast({
-                                      title: 'Erreur',
-                                      description:
-                                        (processRes as any)?.message ||
-                                        'Échec du remboursement',
-                                      variant: 'destructive',
-                                    })
-                                  }
-                                } catch (err: any) {
-                                  const msg =
-                                    err?.response?.data?.message ||
-                                    err?.message ||
-                                    'Impossible de traiter le remboursement'
-                                  toast({
-                                    title: 'Erreur',
-                                    description: msg,
-                                    variant: 'destructive',
-                                  })
-                                }
+                                await rembourser_locataire(dispute)
                               }}
                             >
                               Confirmer le remboursement

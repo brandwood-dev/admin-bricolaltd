@@ -26,8 +26,8 @@ export interface UpdateBookingData {
 }
 
 export interface BookingActionData {
-  reason?: string;
-  adminNotes?: string;
+  reason?: string
+  cancellationMessage?: string
 }
 
 class BookingsService {
@@ -75,7 +75,7 @@ class BookingsService {
   }
 
   async cancelBooking(id: string, data: BookingActionData): Promise<ApiResponse<Booking>> {
-    return await apiClient.patch<Booking>(`/bookings/${id}/cancel`, data);
+    return await apiClient.patch<Booking>(`/bookings/${id}/cancelByAdmin`, data);
   }
 
   async completeBooking(id: string, data?: BookingActionData): Promise<ApiResponse<Booking>> {

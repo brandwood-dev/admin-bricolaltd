@@ -60,6 +60,12 @@ class WithdrawalsService {
     return await apiClient.get<WithdrawalStats>('/admin/withdrawals/stats');
   }
 
+  async getPlatformWallet(): Promise<ApiResponse<{ wallet: { id: string; balance: number; pendingBalance: number; reservedBalance: number; currency: string }; totals: { totalConfirmedWithdrawals: number } }>> {
+    return await apiClient.get<{ wallet: { id: string; balance: number; pendingBalance: number; reservedBalance: number; currency: string }; totals: { totalConfirmedWithdrawals: number } }>(
+      '/admin/withdrawals/platform-wallet'
+    )
+  }
+
   // Process withdrawal (approve/reject)
   async processWithdrawal(id: string, data: ProcessWithdrawalData & { method?: 'wise' | 'stripe_connect' | 'stripe_payout'; bankAccountDetails?: { iban?: string; bic?: string; accountHolderName?: string; currency?: string } }): Promise<ApiResponse<WithdrawalRequest>> {
     if (data.action === 'approve') {

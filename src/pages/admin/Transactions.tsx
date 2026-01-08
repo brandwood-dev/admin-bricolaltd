@@ -441,7 +441,7 @@ const Transactions: React.FC = () => {
                 <TableHead>Type</TableHead>
                 <TableHead>Montant</TableHead>
                 <TableHead>Statut</TableHead>
-                <TableHead>Méthode de paiement</TableHead>
+                <TableHead>ID Reservation</TableHead>
                 <TableHead>Date</TableHead>
               </TableRow>
             </TableHeader>
@@ -482,7 +482,7 @@ const Transactions: React.FC = () => {
                       </div>
                     </TableCell>
                     <TableCell>{getStatusBadge(transaction.status)}</TableCell>
-                    <TableCell>{transaction.paymentMethod}</TableCell>
+                    <TableCell>{transaction.bookingId || '-'} </TableCell>
                     <TableCell>
                       {new Date(transaction.createdAt).toLocaleDateString()}
                     </TableCell>

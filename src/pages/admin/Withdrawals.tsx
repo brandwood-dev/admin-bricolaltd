@@ -83,6 +83,8 @@ const Withdrawals = () => {
   const [rejectionReason, setRejectionReason] = useState('')
   const [withdrawals, setWithdrawals] = useState<WithdrawalRequest[]>([])
   const [stats, setStats] = useState<WithdrawalStats | null>(null)
+  const [platformWallet, setPlatformWallet] = useState<{ balance: number; pendingBalance: number; reservedBalance: number; currency: string } | null>(null)
+  const [platformTotals, setPlatformTotals] = useState<{ totalConfirmedWithdrawals: number }>({ totalConfirmedWithdrawals: 0 })
   const [loading, setLoading] = useState(false)
   const [totalWithdrawals, setTotalWithdrawals] = useState(0)
   const itemsPerPage = 10
@@ -162,6 +164,21 @@ const Withdrawals = () => {
     }
   }
 
+  const loadPlatformWallet = async () => {
+    try {
+      const resp = await withdrawalsService.getPlatformWallet()
+      const payload: any = resp?.data || resp
+      const wallet = payload?.wallet || payload?.data?.wallet
+      const totals = payload?.totals || payload?.data?.totals
+      if (wallet) setPlatformWallet(wallet)
+      if (totals) setPlatformTotals(totals)
+      console.log('Admin Withdrawals: platform wallet', wallet)
+      console.log('Admin Withdrawals: platform totals', totals)
+    } catch (error) {
+      console.error('Error loading platform wallet:', error)
+    }
+  }
+
   // Load data on component mount and when filters change
   useEffect(() => {
     loadWithdrawals()
@@ -173,6 +190,7 @@ const Withdrawals = () => {
 
   useEffect(() => {
     loadStats()
+    loadPlatformWallet()
   }, [])
 
   // Remove mock data - using real API data now
@@ -1027,20 +1045,12 @@ const Withdrawals = () => {
   const paginatedWithdrawals = Array.isArray(withdrawals) ? withdrawals : []
 
   // Calculate wallet metrics per spec
-  const exchangeRateEURtoGBP = 0.85
-  const cumulativeBalance = Math.max(
-    ((stats?.totalAmount || 0) - (stats?.totalFees || 0)) *
-      exchangeRateEURtoGBP,
-    0
-  )
+  const cumulativeBalance = Math.max(Number(platformWallet?.balance || 0), 0)
   const totalWithdrawalsAmount = Math.max(
-    (stats?.completedAmount || 0) * exchangeRateEURtoGBP,
+    Number(platformTotals?.totalConfirmedWithdrawals || 0),
     0
   )
-  const availableBalance = Math.max(
-    cumulativeBalance - totalWithdrawalsAmount,
-    0
-  )
+  const availableBalance = Math.max(Number(platformWallet?.reservedBalance || 0), 0)
   const cumulativeCommissions = Math.max(cumulativeBalance * 0.15, 0)
 
   return (

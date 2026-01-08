@@ -454,6 +454,34 @@ const Disputes = () => {
       })
     }
   }
+  const payer_proprietaire = async (dispute: any) => {
+    try {
+      const res = await bookingsService.payoutBooking(dispute.booking.id)
+      if (res.success) {
+        toast({
+          title: 'Succès',
+          description: 'Paiement au propriétaire effectué',
+        })
+        loadDisputes()
+      } else {
+        toast({
+          title: 'Erreur',
+          description: 'Échec du paiement au propriétaire',
+          variant: 'destructive',
+        })
+      }
+    } catch (e: any) {
+      const msg =
+        e?.response?.data?.message ||
+        e?.message ||
+        "Impossible d'effectuer le paiement"
+      toast({
+        title: 'Erreur',
+        description: msg,
+        variant: 'destructive',
+      })
+    }
+  }
   const DisputeDetailsModal = ({ dispute }: { dispute: any }) => {
     const [localAssessment, setLocalAssessment] = useState({
       cosmetic: 0,
@@ -986,49 +1014,7 @@ const Disputes = () => {
                             <AlertDialogCancel>Annuler</AlertDialogCancel>
                             <AlertDialogAction
                               onClick={async () => {
-                                try {
-                                  const { bookingsService } = await import(
-                                    '@/services/bookingsService'
-                                  )
-                                  if (!dispute.booking?.id) {
-                                    toast({
-                                      title: 'Erreur',
-                                      description:
-                                        'Réservation introuvable pour ce litige',
-                                      variant: 'destructive',
-                                    })
-                                    return
-                                  }
-                                  const res =
-                                    await bookingsService.payoutBooking(
-                                      dispute.booking.id
-                                    )
-                                  if (res.success) {
-                                    toast({
-                                      title: 'Succès',
-                                      description:
-                                        'Paiement au propriétaire effectué',
-                                    })
-                                    loadDisputes()
-                                  } else {
-                                    toast({
-                                      title: 'Erreur',
-                                      description:
-                                        'Échec du paiement au propriétaire',
-                                      variant: 'destructive',
-                                    })
-                                  }
-                                } catch (e: any) {
-                                  const msg =
-                                    e?.response?.data?.message ||
-                                    e?.message ||
-                                    "Impossible d'effectuer le paiement"
-                                  toast({
-                                    title: 'Erreur',
-                                    description: msg,
-                                    variant: 'destructive',
-                                  })
-                                }
+                                await payer_proprietaire(dispute)
                               }}
                             >
                               Confirmer le paiement

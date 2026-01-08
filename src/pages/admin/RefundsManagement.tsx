@@ -1135,7 +1135,8 @@ const RefundsManagement: React.FC = () => {
               {selectedRefund.booking && (
                 <div>
                   <label className='text-sm font-medium text-muted-foreground'>
-                    Informations de réservation
+                    Informations de réservation :{' '}
+                    {(selectedRefund.booking as any)?.id || '-'}
                   </label>
                   <div className='bg-muted p-3 rounded-md space-y-2'>
                     <div className='flex justify-between'>

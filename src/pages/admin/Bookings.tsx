@@ -276,8 +276,7 @@ const BookingDetailsModal = ({
                   {Math.ceil(
                     (new Date(booking.endDate).getTime() -
                       new Date(booking.startDate).getTime()) /
-                      (1000 * 60 * 60 * 24) +
-                      1
+                      (1000 * 60 * 60 * 24) 
                   ) || 0}
                   j
                 </span>
@@ -289,8 +288,7 @@ const BookingDetailsModal = ({
                     Math.ceil(
                       (new Date(booking.endDate).getTime() -
                         new Date(booking.startDate).getTime()) /
-                        (1000 * 60 * 60 * 24) +
-                        1
+                        (1000 * 60 * 60 * 24) 
                     ) * Number(booking.tool?.basePrice || 0)
                   ).toFixed(2)}
                   £

@@ -462,6 +462,18 @@ const Disputes = () => {
           title: 'Succès',
           description: 'Paiement au propriétaire effectué',
         })
+         try {
+           const resolved = await disputesService.markAsResolved(dispute.id)
+           if (resolved.success) {
+             toast({ title: 'Litige', description: 'Statut mis à RESOLVED' })
+           }
+         } catch (err: any) {
+           toast({
+             title: 'Erreur',
+             description: err?.message || 'Échec de la mise à jour du litige',
+             variant: 'destructive',
+           })
+         }
         loadDisputes()
       } else {
         toast({

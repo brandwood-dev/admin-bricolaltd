@@ -60,8 +60,8 @@ class WithdrawalsService {
     return await apiClient.get<WithdrawalStats>('/admin/withdrawals/stats');
   }
 
-  async getPlatformWallet(): Promise<ApiResponse<{ wallet: { id: string; balance: number; pendingBalance: number; reservedBalance: number; currency: string }; totals: { totalConfirmedWithdrawals: number } }>> {
-    return await apiClient.get<{ wallet: { id: string; balance: number; pendingBalance: number; reservedBalance: number; currency: string }; totals: { totalConfirmedWithdrawals: number } }>(
+  async getPlatformWallet(): Promise<ApiResponse<{ wallet: { id: string; balance: number; pendingBalance: number; reservedBalance: number; currency: string }; totals: { totalConfirmedWithdrawals: number }; walletMetrics: { cumulativeBalance: number } }>> {
+    return await apiClient.get<{ wallet: { id: string; balance: number; pendingBalance: number; reservedBalance: number; currency: string }; totals: { totalConfirmedWithdrawals: number }; walletMetrics: { cumulativeBalance: number } }>(
       '/admin/withdrawals/platform-wallet'
     )
   }

@@ -83,10 +83,20 @@ const Withdrawals = () => {
   const [rejectionReason, setRejectionReason] = useState('')
   const [withdrawals, setWithdrawals] = useState<WithdrawalRequest[]>([])
   const [stats, setStats] = useState<WithdrawalStats | null>(null)
-  const [platformWallet, setPlatformWallet] = useState<{ balance: number; pendingBalance: number; reservedBalance: number; currency: string } | null>(null)
-  const [platformTotals, setPlatformTotals] = useState<{ totalConfirmedWithdrawals: number }>({ totalConfirmedWithdrawals: 0 })
+  const [platformWallet, setPlatformWallet] = useState<{
+    balance: number
+    pendingBalance: number
+    reservedBalance: number
+    currency: string
+  } | null>(null)
+  const [platformTotals, setPlatformTotals] = useState<{
+    totalConfirmedWithdrawals: number
+  }>({ totalConfirmedWithdrawals: 0 })
   const [loading, setLoading] = useState(false)
   const [totalWithdrawals, setTotalWithdrawals] = useState(0)
+  const [platformWalletMetrics, setPlatformWalletMetrics] = useState<{
+    cumulativeBalance: number
+  }>({ cumulativeBalance: 0 })
   const itemsPerPage = 10
   const { toast } = useToast()
 
@@ -172,6 +182,8 @@ const Withdrawals = () => {
       const totals = payload?.totals || payload?.data?.totals
       if (wallet) setPlatformWallet(wallet)
       if (totals) setPlatformTotals(totals)
+      if (payload?.walletMetrics)
+        setPlatformWalletMetrics(payload.walletMetrics)
       console.log('Admin Withdrawals: platform wallet', wallet)
       console.log('Admin Withdrawals: platform totals', totals)
     } catch (error) {
@@ -1044,14 +1056,28 @@ const Withdrawals = () => {
   const totalPages = Math.ceil(totalWithdrawals / itemsPerPage)
   const paginatedWithdrawals = Array.isArray(withdrawals) ? withdrawals : []
 
-  // Calculate wallet metrics per spec
-  const cumulativeBalance = Math.max(Number(platformWallet?.balance || 0), 0)
+  // Calculate wallet metrics per spec   verified
+  const cumulativeBalance = Math.max(
+    Number(platformWalletMetrics?.cumulativeBalance || 0),
+    0
+  )
+
+  // verified
   const totalWithdrawalsAmount = Math.max(
     Number(platformTotals?.totalConfirmedWithdrawals || 0),
     0
   )
-  const availableBalance = Math.max(Number(platformWallet?.reservedBalance || 0), 0)
-  const cumulativeCommissions = Math.max(cumulativeBalance * 0.15, 0)
+  // const availableBalance = Math.max(Number(platformWallet?.reservedBalance || 0), 0)
+  //verified
+  const cumulativeCommissions = Math.max(
+    Number(platformWallet?.reservedBalance || 0),
+    0
+  )
+  // solde_dispo = cumulativeBalance - totalWithdrawalsAmount
+  const availableBalance = Math.max(
+    Number(cumulativeBalance - totalWithdrawalsAmount),
+    0
+  )
 
   return (
     <div className='space-y-6'>

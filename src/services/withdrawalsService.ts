@@ -108,10 +108,12 @@ class WithdrawalsService {
       status: 'CONFIRMED'
     });
   }
+  async completeWithdrawal(id: string): Promise<ApiResponse<WithdrawalRequest>> {
+    return await apiClient.post<WithdrawalRequest>(`/admin/withdrawals/${id}/complete`);
+  }
 
   async cancelWithdrawal(id: string, reason: string): Promise<ApiResponse<WithdrawalRequest>> {
-    return await apiClient.patch<WithdrawalRequest>(`/admin/transactions/${id}/status`, {
-      status: 'CANCELLED',
+    return await apiClient.patch<WithdrawalRequest>(`/admin/withdrawals/${id}/cancel`, {
       reason
     });
   }

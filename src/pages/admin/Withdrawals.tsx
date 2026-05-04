@@ -93,6 +93,9 @@ const Withdrawals = () => {
     totalConfirmedWithdrawals: number
   }>({ totalConfirmedWithdrawals: 0 })
   const [loading, setLoading] = useState(false)
+  const [completingWithdrawalId, setCompletingWithdrawalId] = useState<
+    string | null
+  >(null)
   const [totalWithdrawals, setTotalWithdrawals] = useState(0)
   const [platformWalletMetrics, setPlatformWalletMetrics] = useState<{
     cumulativeBalance: number
@@ -135,8 +138,8 @@ const Withdrawals = () => {
       const list: any[] = Array.isArray(payload?.data)
         ? payload.data
         : Array.isArray(payload)
-        ? payload
-        : []
+          ? payload
+          : []
       const total: number =
         (typeof payload?.total === 'number' ? payload.total : undefined) ??
         (typeof payload?.meta?.total === 'number'
@@ -167,7 +170,7 @@ const Withdrawals = () => {
       setStats((statsData as any)?.data || null)
       console.log(
         'Admin Withdrawals: bound stats',
-        (statsData as any)?.data || null
+        (statsData as any)?.data || null,
       )
     } catch (error) {
       console.error('Error loading withdrawal stats:', error)
@@ -273,7 +276,7 @@ const Withdrawals = () => {
       bic: string
       accountHolderName: string
       currency?: string
-    }
+    },
   ) => {
     try {
       // Use the new processWithdrawal method for real transfers
@@ -287,7 +290,7 @@ const Withdrawals = () => {
           withdrawalId,
           'Processed via Stripe Connect',
           stripeAccountId,
-          'stripe_connect'
+          'stripe_connect',
         )
         toast({
           title: 'Transfer Initiated',
@@ -350,7 +353,7 @@ const Withdrawals = () => {
             bic: details.bic,
             accountHolderName: details.accountHolderName,
             currency,
-          }
+          },
         )
         if ((amountGBP || 0) > 0 && (amountGBP as number) < 500) {
           await withdrawalsService.confirmWithdrawal(withdrawalId)
@@ -417,21 +420,23 @@ const Withdrawals = () => {
   }
 
   const handleComplete = async (withdrawalId: string) => {
+    setCompletingWithdrawalId(withdrawalId)
     try {
-      await withdrawalsService.processWithdrawal(withdrawalId, {
-        status: 'completed',
-      })
+      await withdrawalsService.completeWithdrawal(withdrawalId)
       toast({
         title: 'Retrait terminé',
-        description: 'Le retrait a été marqué comme terminé.',
+        description:
+          "Le retrait a été finalisé, le solde de l'utilisateur a été mis à jour.",
       })
-      loadWithdrawals() // Refresh data
+      await Promise.all([loadWithdrawals(), loadStats(), loadPlatformWallet()])
     } catch (error) {
       toast({
         title: 'Erreur',
         description: 'Impossible de marquer le retrait comme terminé.',
         variant: 'destructive',
       })
+    } finally {
+      setCompletingWithdrawalId(null)
     }
   }
 
@@ -444,7 +449,7 @@ const Withdrawals = () => {
     const [rejectOpen, setRejectOpen] = useState(false)
     const [localRejectReason, setLocalRejectReason] = useState('')
     const [ownerLocationsCount, setOwnerLocationsCount] = useState<number>(
-      withdrawal.user?.completedRentals || 0
+      withdrawal.user?.completedRentals || 0,
     )
     const [walletBalance, setWalletBalance] = useState<number>(0)
     useEffect(() => {
@@ -598,7 +603,7 @@ const Withdrawals = () => {
                   <div className='text-sm text-gray-600'>
                     Méthode:{' '}
                     {getMethodBadge(
-                      resolveMethod(withdrawal) || withdrawal.method
+                      resolveMethod(withdrawal) || withdrawal.method,
                     )}
                   </div>
                 </CardContent>
@@ -737,10 +742,10 @@ const Withdrawals = () => {
                           withdrawal.stripeTransferStatus === 'paid'
                             ? 'bg-green-500'
                             : withdrawal.stripeTransferStatus === 'pending'
-                            ? 'bg-yellow-500'
-                            : withdrawal.stripeTransferStatus === 'failed'
-                            ? 'bg-red-500'
-                            : 'bg-gray-500'
+                              ? 'bg-yellow-500'
+                              : withdrawal.stripeTransferStatus === 'failed'
+                                ? 'bg-red-500'
+                                : 'bg-gray-500'
                         }
                       >
                         {withdrawal.stripeTransferStatus || 'Not initiated'}
@@ -779,10 +784,10 @@ const Withdrawals = () => {
                           withdrawal.wiseTransferStatus === 'completed'
                             ? 'bg-green-500'
                             : withdrawal.wiseTransferStatus === 'processing'
-                            ? 'bg-yellow-500'
-                            : withdrawal.wiseTransferStatus === 'failed'
-                            ? 'bg-red-500'
-                            : 'bg-gray-500'
+                              ? 'bg-yellow-500'
+                              : withdrawal.wiseTransferStatus === 'failed'
+                                ? 'bg-red-500'
+                                : 'bg-gray-500'
                         }
                       >
                         {withdrawal.wiseTransferStatus || 'Not initiated'}
@@ -892,7 +897,7 @@ const Withdrawals = () => {
                             resolveMethod(withdrawal) === 'wise' ||
                               resolveMethod(withdrawal) === 'bank_transfer'
                               ? { iban, bic, accountHolderName }
-                              : undefined
+                              : undefined,
                           )
                         }
                         className='w-full bg-green-600 hover:bg-green-700'
@@ -901,9 +906,9 @@ const Withdrawals = () => {
                         {resolveMethod(withdrawal) === 'stripe_connect'
                           ? 'Process Transfer'
                           : resolveMethod(withdrawal) === 'wise' ||
-                            resolveMethod(withdrawal) === 'bank_transfer'
-                          ? 'Valider les détails'
-                          : 'Confirmer la demande'}
+                              resolveMethod(withdrawal) === 'bank_transfer'
+                            ? 'Valider les détails'
+                            : 'Confirmer la demande'}
                       </Button>
 
                       <Button
@@ -1016,7 +1021,7 @@ const Withdrawals = () => {
                             resolveMethod(withdrawal) === 'wise' ||
                               resolveMethod(withdrawal) === 'bank_transfer'
                               ? { iban, bic, accountHolderName }
-                              : undefined
+                              : undefined,
                           )
                         }
                         className='w-full bg-green-600 hover:bg-green-700'
@@ -1027,14 +1032,17 @@ const Withdrawals = () => {
                     </>
                   )}
 
-                  {withdrawal.status === 'confirmed' && (
+                  {(withdrawal.status === 'pending' ||
+                    withdrawal.status === 'confirmed') && (
                     <Button
                       onClick={() => handleComplete(withdrawal.id)}
                       className='w-full'
-                      disabled
+                      disabled={completingWithdrawalId === withdrawal.id}
                     >
                       <CheckCircle className='h-4 w-4 mr-2' />
-                      Cette demande a déjà été confirmé
+                      {completingWithdrawalId === withdrawal.id
+                        ? 'Finalisation en cours...'
+                        : "Terminer l'opération"}
                     </Button>
                   )}
                 </CardContent>
@@ -1050,7 +1058,7 @@ const Withdrawals = () => {
 
   console.log(
     'Admin Withdrawals: state withdrawals length',
-    Array.isArray(withdrawals) ? withdrawals.length : 'not array'
+    Array.isArray(withdrawals) ? withdrawals.length : 'not array',
   )
   const startIndex = (currentPage - 1) * itemsPerPage
   const totalPages = Math.ceil(totalWithdrawals / itemsPerPage)
@@ -1059,24 +1067,24 @@ const Withdrawals = () => {
   // Calculate wallet metrics per spec   verified
   const cumulativeBalance = Math.max(
     Number(platformWalletMetrics?.cumulativeBalance || 0),
-    0
+    0,
   )
 
   // verified
   const totalWithdrawalsAmount = Math.max(
     Number(platformTotals?.totalConfirmedWithdrawals || 0),
-    0
+    0,
   )
   // const availableBalance = Math.max(Number(platformWallet?.reservedBalance || 0), 0)
   //verified
   const cumulativeCommissions = Math.max(
     Number(platformWallet?.reservedBalance || 0),
-    0
+    0,
   )
   // solde_dispo = cumulativeBalance - totalWithdrawalsAmount
   const availableBalance = Math.max(
     Number(cumulativeBalance - totalWithdrawalsAmount),
-    0
+    0,
   )
 
   return (
